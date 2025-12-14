@@ -88,7 +88,7 @@ The **Student** module allows students to access academic information and submit
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/your-username/Academic-Anatomy-Of-Higher-Education.git
+   git clone https://github.com/KvUday1712/Academic-Anatomy-Of-Higher-Education.git
    ```
 2. Navigate to the project directory
    ```bash
