@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Leave Requests</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 700px;
+            text-align: center;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        .request-list {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .request-list ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .request-list li {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            font-size: 14px;
+        }
+        .request-list button {
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-right: 6px;
+            font-size: 13px;
+        }
+        .request-list button:hover {
+            opacity: 0.9;
+        }
+        .accept-button {
+            background-color: #28a745;
+        }
+        .accept-button:hover {
+            background-color: #218838;
+        }
+        .reject-button {
+            background-color: #dc3545;
+        }
+        .reject-button:hover {
+            background-color: #c82333;
+        }
+        .status-pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-approved {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-rejected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        #messageBox {
+            margin-bottom: 12px;
+            padding: 8px;
+            border-radius: 4px;
+            display: none;
+            font-size: 0.95em;
+            text-align: left;
+        }
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Manage Leave Requests</h2>
+
+        <div id="messageBox"></div>
+
+        <div class="request-list">
+            <ul id="requestList"></ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if serving frontend separately
+        let currentRequests = []; // merged list: server + local
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function normalizeServerLeave(l) {
+            // try to derive a display name
+            let name =
+                l.requester_name ||
+                (l.student && (l.student.full_name || l.student.name)) ||
+                (l.staff && (l.staff.full_name || l.staff.name)) ||
+                l.title ||
+                "Unknown";
+
+            return {
+                _source: "server",
+                id: l.id,
+                name: name,
+                start_date: l.from_date || "",
+                end_date: l.to_date || "",
+                reason: l.reason || "",
+                status: l.status || "pending",
+                raw: l
+            };
+        }
+
+        function normalizeLocalLeave(l, index) {
+            return {
+                _source: "local",
+                localIndex: index,
+                name: l.name || "Unknown",
+                start_date: l.start_date || l.from_date || "",
+                end_date: l.end_date || l.to_date || "",
+                reason: l.reason || "",
+                status: l.status || "pending",
+                raw: l
+            };
+        }
+
+        function renderRequests() {
+            const listEl = document.getElementById('requestList');
+            listEl.innerHTML = "";
+
+            if (!currentRequests.length) {
+                const li = document.createElement("li");
+                li.textContent = "No leave requests found.";
+                listEl.appendChild(li);
+                return;
+            }
+
+            currentRequests.forEach((req, index) => {
+                const li = document.createElement("li");
+
+                const status = (req.status || "pending").toLowerCase();
+                let statusClass = "status-pending";
+                if (status === "approved") statusClass = "status-approved";
+                else if (status === "rejected") statusClass = "status-rejected";
+
+                let actionsHtml = "";
+                // Only show action buttons for pending requests
+                if (status === "pending") {
+                    actionsHtml = `
+                        <button class="accept-button" onclick="handleRequest(${index}, 'accept')">Accept</button>
+                        <button class="reject-button" onclick="handleRequest(${index}, 'reject')">Reject</button>
+                    `;
+                }
+
+                li.innerHTML = `
+                    <strong>Name:</strong> ${req.name}<br>
+                    <strong>Start Date:</strong> ${req.start_date || "-"}<br>
+                    <strong>End Date:</strong> ${req.end_date || "-"}<br>
+                    <strong>Reason:</strong> ${req.reason || "-"}<br>
+                    <span class="status-pill ${statusClass}">Status: ${status}</span><br>
+                    ${actionsHtml}
+                `;
+                listEl.appendChild(li);
+            });
+        }
+
+        async function loadRequests() {
+            currentRequests = [];
+
+            // First, try to load pending leaves from server
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/leaves/?status=pending`, { headers });
+                if (!resp.ok) throw new Error("Could not load leaves from server");
+                const data = await resp.json();
+
+                if (Array.isArray(data)) {
+                    data.forEach(l => {
+                        currentRequests.push(normalizeServerLeave(l));
+                    });
+                }
+            } catch (err) {
+                console.warn("Error loading leaves from backend, will rely more on localStorage:", err);
+            }
+
+            // Merge localStorage-based leave requests (offline or cached)
+            try {
+                const local = JSON.parse(localStorage.getItem('leaveRequests') || "[]");
+                local.forEach((l, idx) => {
+                    currentRequests.push(normalizeLocalLeave(l, idx));
+                });
+            } catch (err) {
+                console.warn("Error reading local leaveRequests:", err);
+            }
+
+            renderRequests();
+        }
+
+        async function handleRequest(index, action) {
+            const req = currentRequests[index];
+            if (!req) return;
+
+            const newStatus = action === "accept" ? "approved" : "rejected";
+
+            // local helper: update/remove from localStorage
+            function updateLocalStorageForRequest() {
+                try {
+                    const local = JSON.parse(localStorage.getItem('leaveRequests') || "[]");
+                    if (typeof req.localIndex === "number" && req.localIndex >= 0 && req.localIndex < local.length) {
+                        // Remove that request entirely (old behaviour)
+                        local.splice(req.localIndex, 1);
+                        localStorage.setItem('leaveRequests', JSON.stringify(local));
+                    }
+                } catch (e) {
+                    console.warn("Could not update localStorage leaveRequests:", e);
+                }
+            }
+
+            // If this is a server-backed request with an id, update via API
+            if (req._source === "server" && req.id) {
+                try {
+                    const headers = { "Content-Type": "application/json" };
+                    const token = getToken();
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                    const resp = await fetch(`${API_BASE}/leaves/${req.id}`, {
+                        method: "PUT",
+                        headers,
+                        body: JSON.stringify({ status: newStatus })
+                    });
+
+                    const data = await resp.json().catch(() => ({}));
+                    if (!resp.ok) {
+                        const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                        showMessage("Error updating request: " + err, "error");
+                        return;
+                    }
+
+                    showMessage(`Leave request from ${req.name} ${newStatus}.`, "success");
+                    // Remove from current list (behaves like your original code)
+                    currentRequests.splice(index, 1);
+                    renderRequests();
+                    return;
+                } catch (err) {
+                    console.error("Network error updating leave request:", err);
+                    showMessage("Network error while updating request.", "error");
+                    return;
+                }
+            }
+
+            // If local-only request (old behaviour)
+            updateLocalStorageForRequest();
+            showMessage(`Leave request from ${req.name} ${newStatus}. (local only)`, "success");
+            currentRequests.splice(index, 1);
+            renderRequests();
+        }
+
+        // Make handleRequest accessible from inline onclick
+        window.handleRequest = handleRequest;
+
+        document.addEventListener("DOMContentLoaded", loadRequests);
+    </script>
+</body>
+</html>

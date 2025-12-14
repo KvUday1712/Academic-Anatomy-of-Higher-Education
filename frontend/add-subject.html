@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Subject</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .option {
+            margin-top: 20px;
+        }
+
+        .option a {
+            display: block;
+            padding: 15px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 18px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .option a:hover {
+            background-color: #0056b3;
+        }
+
+        .option a:active {
+            background-color: #003d7a;
+        }
+
+        .dropdown {
+            display: none;
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .dropdown .form-container {
+            padding: 15px;
+        }
+
+        .form-container label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .form-container input,
+        .form-container select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .form-container button,
+        .form-container a.button {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .form-container button:hover,
+        .form-container a.button:hover {
+            background-color: #0056b3;
+        }
+
+        /* message box */
+        #message {
+            display: none;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        #message.success {
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+            display: block;
+        }
+
+        #message.error {
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+            display: block;
+        }
+    </style>
+    <script>
+        // API base - change to "http://localhost:5000/api" if frontend is hosted separately during development
+        const API_BASE = "/api";
+
+        // helper to show messages
+        function showMessage(text, type = "success") {
+            const el = document.getElementById("message");
+            el.textContent = text;
+            el.className = type === "success" ? "success" : "error";
+            el.style.display = "block";
+            setTimeout(() => { el.style.display = "none"; }, 4000);
+        }
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        // toggle dropdown visibility
+        function toggleDropdown(id) {
+            var dropdown = document.getElementById(id);
+            dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+        }
+
+        // populate select from API, fallback to localStorage
+        async function fillSelectFromApi(selectId, apiPath, localKey, labelKey = "name") {
+            const sel = document.getElementById(selectId);
+            try {
+                const resp = await fetch(`${API_BASE}${apiPath}`);
+                if (!resp.ok) throw new Error("API not ok");
+                const data = await resp.json();
+                sel.innerHTML = "";
+                if (!Array.isArray(data) || data.length === 0) {
+                    sel.innerHTML = '<option value="">No items</option>';
+                    localStorage.setItem(localKey, JSON.stringify(data || []));
+                    return;
+                }
+                // data may be array of objects or strings
+                data.forEach(item => {
+                    const opt = document.createElement("option");
+                    if (typeof item === "string") {
+                        opt.value = item;
+                        opt.textContent = item;
+                    } else {
+                        // prefer id if present, otherwise use nameKey or toString
+                        opt.value = (item.id !== undefined && item.id !== null) ? item.id : (item[labelKey] || JSON.stringify(item));
+                        opt.textContent = item[labelKey] || item.name || item.username || opt.value;
+                    }
+                    sel.appendChild(opt);
+                });
+                localStorage.setItem(localKey, JSON.stringify(data));
+            } catch (err) {
+                // fallback to localStorage
+                const stored = JSON.parse(localStorage.getItem(localKey) || "[]");
+                sel.innerHTML = "";
+                if (stored.length === 0) {
+                    sel.innerHTML = '<option value="">No items</option>';
+                    return;
+                }
+                stored.forEach(item => {
+                    const opt = document.createElement("option");
+                    if (typeof item === "string") {
+                        opt.value = item; opt.textContent = item;
+                    } else {
+                        opt.value = (item.id !== undefined && item.id !== null) ? item.id : (item[labelKey] || JSON.stringify(item));
+                        opt.textContent = item[labelKey] || item.name || item.username || opt.value;
+                    }
+                    sel.appendChild(opt);
+                });
+            }
+        }
+
+        // add subject: posts to backend, fallback to localStorage
+        async function addSubject(event) {
+            event.preventDefault();
+
+            const subjectName = document.getElementById('subjectName').value.trim();
+            const courseValue = document.getElementById('courseName').value;
+            const staffValue = document.getElementById('staffName').value;
+            const sessionValue = document.getElementById('sessionName').value;
+
+            if (!subjectName) {
+                showMessage("Please enter subject name", "error");
+                return;
+            }
+            if (!courseValue) {
+                showMessage("Please select a course", "error");
+                return;
+            }
+            if (!staffValue) {
+                showMessage("Please select a staff member", "error");
+                return;
+            }
+
+            // Build payload. Prefer numeric IDs, but include fallbacks so backend can accept names.
+            const payload = {
+                name: subjectName,
+                course_id: isNaN(Number(courseValue)) ? null : Number(courseValue),
+                course_name_fallback: isNaN(Number(courseValue)) ? courseValue : null,
+                staff_id: isNaN(Number(staffValue)) ? null : Number(staffValue),
+                staff_name_fallback: isNaN(Number(staffValue)) ? staffValue : null,
+                session_id: isNaN(Number(sessionValue)) ? null : Number(sessionValue),
+                session_name_fallback: isNaN(Number(sessionValue)) ? sessionValue : null
+            };
+
+            const headers = { "Content-Type": "application/json" };
+            const token = getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            try {
+                const resp = await fetch(`${API_BASE}/subjects/`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                const json = await resp.json().catch(() => ({}));
+
+                if (resp.ok) {
+                    // cache subject locally too
+                    try {
+                        const local = JSON.parse(localStorage.getItem('subjects') || "[]");
+                        local.push({ name: subjectName, course: courseValue, staff: staffValue, session: sessionValue, server_id: json.id || null });
+                        localStorage.setItem('subjects', JSON.stringify(local));
+                    } catch (e) { /* ignore caching errors */ }
+
+                    showMessage("Subject added successfully.", "success");
+                    document.getElementById('addSubjectForm').reset();
+                    // optionally close dropdown
+                    document.getElementById('addSubjectDropdown').style.display = "none";
+                } else {
+                    const err = json.msg || json.error || `Server responded ${resp.status}`;
+                    showMessage("Error: " + err, "error");
+                }
+            } catch (err) {
+                // network error -> fallback to localStorage
+                console.error("Network error while adding subject:", err);
+                const local = JSON.parse(localStorage.getItem('subjects') || "[]");
+                local.push({ name: subjectName, course: courseValue, staff: staffValue, session: sessionValue, offline: true, time: new Date().toISOString() });
+                localStorage.setItem('subjects', JSON.stringify(local));
+                showMessage("Backend not reachable — subject saved locally.", "success");
+                document.getElementById('addSubjectForm').reset();
+                document.getElementById('addSubjectDropdown').style.display = "none";
+            }
+        }
+
+        // on load: fill selects
+        window.onload = function () {
+            fillSelectFromApi("staffName", "/staff/", "staffMembers", "full_name");
+            fillSelectFromApi("courseName", "/courses/", "courses", "name");
+            fillSelectFromApi("sessionName", "/sessions/", "sessions", "name");
+            // hook up form submit
+            document.getElementById('addSubjectForm').addEventListener('submit', addSubject);
+        };
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="option">
+            <a onclick="toggleDropdown('addSubjectDropdown')">Add Subject</a>
+
+            <div class="dropdown" id="addSubjectDropdown">
+                <div class="form-container">
+                    <h2>Add New Subject</h2>
+
+                    <!-- message box -->
+                    <div id="message"></div>
+
+                    <form id="addSubjectForm">
+                        <label for="subjectName">Subject Name:</label>
+                        <input type="text" id="subjectName" name="subjectName" required>
+
+                        <label for="staffName">Staff Name:</label>
+                        <select id="staffName" name="staffName" required>
+                            <!-- Options will be populated by fillSelectFromApi() -->
+                        </select>
+
+                        <label for="courseName">Course Name:</label>
+                        <select id="courseName" name="courseName" required>
+                            <!-- Options will be populated by fillSelectFromApi() -->
+                        </select>
+
+                        <label for="sessionName">Session Name:</label>
+                        <select id="sessionName" name="sessionName" required>
+                            <!-- Options will be populated by fillSelectFromApi() -->
+                        </select>
+
+                        <button type="submit">Submit</button>
+                        <a href="admin_dashboard.html" class="button">Go to admin-dashboard</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+
+    .container {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      max-width: 900px;
+      margin: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .admin-info {
+      font-size: 14px;
+      color: #555;
+    }
+
+    .option {
+      margin: 10px 0;
+    }
+
+    .option a {
+      display: block;
+      padding: 15px;
+      background-color: #007bff;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 4px;
+      text-align: left;
+      font-size: 18px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .option a:hover {
+      background-color: #0056b3;
+    }
+
+    .option a:active {
+      background-color: #003d7a;
+    }
+
+    .logout {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .logout a {
+      color: #007bff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .logout a:hover {
+      text-decoration: underline;
+    }
+
+    .dropdown {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .dropdown a {
+      padding: 10px;
+      background-color: #28a745;
+      color: #fff;
+      text-decoration: none;
+      display: block;
+      border-radius: 4px;
+      text-align: center;
+      margin-bottom: 6px;
+    }
+
+    .dropdown a:hover {
+      background-color: #218838;
+    }
+
+    /* small count badge */
+    .badge {
+      background: #fff;
+      color: #333;
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      border: 1px solid #ddd;
+      position: absolute;
+      right: 14px;
+      top: 12px;
+    }
+
+    /* responsive */
+    @media (max-width:600px) {
+      .option a {
+        font-size: 16px;
+        padding: 12px;
+      }
+
+      .badge {
+        right: 10px;
+        top: 10px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>
+      Admin Dashboard
+      <span class="admin-info" id="adminInfo">Checking login...</span>
+    </h1>
+
+    <div class="option">
+      <a onclick="toggleDropdown('staffDropdown')">Add Staff
+        <span class="badge" id="staffBadge">--</span>
+      </a>
+      <div class="dropdown" id="staffDropdown">
+        <a href="add_staff_profile.html">Add Staff</a>
+        <a href="manage_profile.html">Manage Staff</a>
+      </div>
+    </div>
+
+    <div class="option">
+      <a onclick="toggleDropdown('courseDropdown')">Courses
+        <span class="badge" id="coursesBadge">--</span>
+      </a>
+      <div class="dropdown" id="courseDropdown">
+        <a href="add-course.html">Add Course</a>
+        <a href="manage-courses.html">Manage Courses</a>
+      </div>
+    </div>
+
+    <div class="option">
+      <a onclick="toggleDropdown('subjectDropdown')">Subjects
+        <span class="badge" id="subjectsBadge">--</span>
+      </a>
+      <div class="dropdown" id="subjectDropdown">
+        <a href="add-subject.html">Add Subject</a>
+        <a href="manage-subject.html">Manage Subject</a>
+      </div>
+    </div>
+
+    <div class="option">
+      <a onclick="toggleDropdown('sessionDropdown')">Sessions
+        <span class="badge" id="sessionsBadge">--</span>
+      </a>
+      <div class="dropdown" id="sessionDropdown">
+        <a href="add_session.html">Add Session</a>
+        <a href="manage_session.html">Manage Sessions</a>
+      </div>
+    </div>
+
+    <div class="option">
+      <a onclick="toggleDropdown('studentDropdown')">Students
+        <span class="badge" id="studentsBadge">--</span>
+      </a>
+      <div class="dropdown" id="studentDropdown">
+        <a href="add_student.html">Add Student</a>
+        <a href="manage_students.html">Manage Students</a>
+      </div>
+    </div>
+
+    <div class="option">
+      <a href="manage_leave_requests.html">Leave Permissions
+        <span class="badge" id="leavesBadge">--</span>
+      </a>
+    </div>
+
+    <div class="logout">
+      <a id="logoutLink" href="login.html">Logout</a>
+    </div>
+  </div>
+  <script>
+    // =======================
+    // CONFIG
+    // =======================
+
+    // Must match login.html
+    const API_BASE = "/api"; // change to "http://localhost:5000/api" if backend is separate
+
+    // =======================
+    // HELPERS
+    // =======================
+
+    function getToken() {
+      return localStorage.getItem("token") || null;
+    }
+
+    function getUserRole() {
+      return localStorage.getItem("userRole") || null;
+    }
+
+    function clearAuthData() {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userRole");
+      localStorage.removeItem("loggedInStudentId");
+      localStorage.removeItem("loggedInStudentName");
+      localStorage.removeItem("loggedInStaffCourse");
+      localStorage.removeItem("loggedInStaffName");
+    }
+
+    function logout() {
+      console.log("[logout] Clearing auth data and going to login");
+      clearAuthData();
+      window.location.href = "login.html";
+    }
+
+    function toggleDropdown(id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = el.style.display === "block" ? "none" : "block";
+    }
+
+    // Try to fetch an endpoint and return array length or fallback value
+    async function fetchCount(path, localKey) {
+      try {
+        const headers = {};
+        const token = getToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        console.log("[fetchCount] Requesting:", API_BASE + path);
+        const resp = await fetch(`${API_BASE}${path}`, { headers });
+
+        console.log("[fetchCount] Status for", path, "=", resp.status);
+
+        if (!resp.ok) throw new Error("bad response: " + resp.status);
+
+        const data = await resp.json();
+
+        if (Array.isArray(data)) return data.length;
+        if (data && typeof data.count === "number") return data.count;
+        if (data && typeof data === "object") return Object.keys(data).length;
+
+        return 0;
+      } catch (err) {
+        console.warn("[fetchCount] Error, falling back to localStorage for", localKey, err);
+        try {
+          const local = JSON.parse(localStorage.getItem(localKey) || "[]");
+          return Array.isArray(local) ? local.length : 0;
+        } catch (e) {
+          return 0;
+        }
+      }
+    }
+
+    // =======================
+    // AUTH + ADMIN GUARD
+    // =======================
+
+    // This function:
+    // 1. Uses token + /auth/me if token is available (backend mode)
+    // 2. Falls back to localStorage role if no token (local admin mode)
+    // 3. Ensures role is admin; otherwise redirects to login
+    async function ensureAdminAuthAndSetInfo() {
+      const token = getToken();
+      const storedRoleRaw = getUserRole();
+      const storedRole = (storedRoleRaw || "").toLowerCase();
+
+      console.log("[auth] token =", token);
+      console.log("[auth] storedRole =", storedRoleRaw);
+
+      // ========= CASE 1: token exists (backend mode) =========
+      if (token) {
+        try {
+          console.log("[auth] Calling", API_BASE + "/auth/me");
+
+          const resp = await fetch(`${API_BASE}/auth/me`, {
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          });
+
+          console.log("[auth] /auth/me status =", resp.status);
+
+          // If server clearly rejects token, log out
+          if (resp.status === 401 || resp.status === 403) {
+            console.warn("[auth] Token rejected by server (401/403). Logging out.");
+            logout();
+            return false;
+          }
+
+          let apiRoleLower = storedRole;
+
+          if (resp.ok) {
+            const me = await resp.json();
+            console.log("[auth] /auth/me payload =", me);
+
+            // Role from backend if available
+            if (me.role) {
+              apiRoleLower = String(me.role).toLowerCase();
+              localStorage.setItem("userRole", apiRoleLower);
+            }
+
+            // Show admin name
+            const adminEl = document.getElementById("adminInfo");
+            if (adminEl) {
+              adminEl.textContent = `Logged in as: ${me.username || me.email || "Admin"}`;
+            }
+          } else {
+            // /auth/me not OK but not 401/403 → network/server issue
+            console.warn("[auth] /auth/me not OK (status:", resp.status, "). Using stored role only.");
+          }
+
+          // Now check final role (from API if present, otherwise stored)
+          const finalRole = (localStorage.getItem("userRole") || apiRoleLower || "").toLowerCase();
+          console.log("[auth] finalRole (backend mode) =", finalRole);
+
+          if (finalRole !== "admin") {
+            console.warn("[auth] finalRole is not admin (", finalRole, "). Logging out.");
+            logout();
+            return false;
+          }
+
+          // Passed backend admin check
+          const adminEl = document.getElementById("adminInfo");
+          if (adminEl && !adminEl.textContent) {
+            adminEl.textContent = "Logged in as: Admin";
+          }
+
+          console.log("[auth] Backend admin auth passed.");
+          return true;
+
+        } catch (err) {
+          console.warn("[auth] Error calling /auth/me. Falling back to stored role.", err);
+          // fall through to stored-role check
+        }
+      }
+
+      // ========= CASE 2: no token OR backend error → local-only mode =========
+      const finalStoredRole = (getUserRole() || "").toLowerCase();
+      console.log("[auth] finalStoredRole (local mode) =", finalStoredRole);
+
+      // LOCAL ADMIN MODE:
+      // This allows your local fallback login (admin/admin123) to work
+      if (finalStoredRole === "admin") {
+        const adminEl = document.getElementById("adminInfo");
+        if (adminEl) {
+          adminEl.textContent = "Logged in as: Admin";
+        }
+        console.log("[auth] Local admin mode allowed (no token).");
+        return true;
+      }
+
+      // If not admin at all → redirect to login
+      console.warn("[auth] User is not admin (role =", finalStoredRole, "). Redirecting to login.");
+      window.location.href = "login.html";
+      return false;
+    }
+
+    // =======================
+    // COUNTS / BADGES
+    // =======================
+
+    async function populateCounts() {
+      const mappings = [
+        { selector: "studentsBadge", path: "/students/", localKey: "students" },
+        { selector: "coursesBadge", path: "/courses/", localKey: "courses" },
+        { selector: "subjectsBadge", path: "/subjects/", localKey: "subjects" },
+        { selector: "sessionsBadge", path: "/sessions/", localKey: "sessions" },
+        { selector: "staffBadge", path: "/staff/", localKey: "staffMembers" },
+        { selector: "leavesBadge", path: "/leaves/?status=pending", localKey: "leaves" }
+      ];
+
+      for (const m of mappings) {
+        const el = document.getElementById(m.selector);
+        if (!el) continue;
+        const count = await fetchCount(m.path, m.localKey);
+        el.textContent = count;
+      }
+    }
+
+    // =======================
+    // PAGE INIT
+    // =======================
+
+    document.addEventListener("DOMContentLoaded", async function () {
+      console.log("[init] DOMContentLoaded on admin_dashboard");
+
+      // Make dropdown toggler available for inline onclick=""
+      window.toggleDropdown = toggleDropdown;
+
+      // 1. Ensure admin auth (backend or local fallback)
+      const ok = await ensureAdminAuthAndSetInfo();
+      if (!ok) {
+        console.warn("[init] Auth guard failed; redirect done.");
+        return;
+      }
+
+      // 2. Populate counts
+      populateCounts();
+
+      // 3. Wire up logout
+      const logoutLink = document.getElementById("logoutLink");
+      if (logoutLink) {
+        logoutLink.addEventListener("click", function (e) {
+          e.preventDefault();
+          logout();
+        });
+      }
+
+      console.log("[init] Admin dashboard initialized.");
+    });
+  </script>
+
+
+
+
+</body>
+
+</html>

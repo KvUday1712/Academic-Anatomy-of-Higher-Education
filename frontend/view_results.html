@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Results</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+
+        .result {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            background-color: #f9fafb;
+            border: 1px solid #e1e4e8;
+        }
+
+        .result p {
+            margin: 4px 0;
+        }
+
+        .average {
+            font-weight: bold;
+            margin-top: 6px;
+        }
+
+        .nav-link {
+            display: inline-block;
+            margin-top: 15px;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .nav-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>View Results</h1>
+
+        <div id="messageBox"></div>
+
+        <div id="resultsContainer"></div>
+        <a href="student_dashboard.html" class="nav-link">Back to Dashboard</a>
+    </div>
+
+    <script>
+        /* Robust view_results client with extended debugging and extra fallbacks.
+           Replace the existing <script> in view_results.html with this block.
+        */
+
+        const API_BASE = "/api";
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function dbg(...args) { console.debug("[view_results]", ...args); }
+        function info(...args) { console.info("[view_results]", ...args); }
+        function warn(...args) { console.warn("[view_results]", ...args); }
+        function err(...args) { console.error("[view_results]", ...args); }
+
+        function showMessage(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            if (!box) return;
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function normalizeBackendResult(r) {
+            const subject = r.subject_name || r.subject || "Unknown Subject";
+            const ia1 = Number(r.ia1 ?? r.ia_1 ?? 0);
+            const ia2 = Number(r.ia2 ?? r.ia_2 ?? 0);
+            const ia3 = Number(r.ia3 ?? r.ia_3 ?? 0);
+            const attendance = Number(r.attendance ?? 0);
+            return { source: "server", id: r.id || null, subject, ia1, ia2, ia3, attendance };
+        }
+
+        function normalizeLocalResult(r) {
+            return {
+                source: "local",
+                id: r.id || null,
+                studentId: r.studentId || r.student_id || null,
+                studentName: r.studentName || r.student_name || r.name || "",
+                subject: r.subject || r.subject_name || "Unknown Subject",
+                ia1: Number(r.ia1 ?? 0),
+                ia2: Number(r.ia2 ?? 0),
+                ia3: Number(r.ia3 ?? 0),
+                attendance: Number(r.attendance ?? 0)
+            };
+        }
+
+        function loadLocalResults(studentId, studentName) {
+            try {
+                const all = JSON.parse(localStorage.getItem("results") || "[]");
+                const normalized = all.map(normalizeLocalResult);
+                return normalized.filter(r => {
+                    if (studentId != null && studentId !== "") return String(r.studentId) === String(studentId);
+                    return r.studentName === studentName;
+                });
+            } catch (e) {
+                warn("Error reading local results:", e);
+                return [];
+            }
+        }
+
+        function mergeResults(serverResults, localResults) {
+            if (!serverResults || serverResults.length === 0) {
+                return localResults.map(r => ({ source: "local", subject: r.subject, ia1: r.ia1, ia2: r.ia2, ia3: r.ia3, attendance: r.attendance }));
+            }
+            const keySet = new Set(serverResults.map(r => `${r.subject}|${r.ia1}|${r.ia2}|${r.ia3}|${r.attendance}`));
+            const extras = localResults.filter(r => {
+                const key = `${r.subject}|${r.ia1}|${r.ia2}|${r.ia3}|${r.attendance}`;
+                return !keySet.has(key);
+            });
+            return [...serverResults, ...extras.map(r => ({ source: "local", subject: r.subject, ia1: r.ia1, ia2: r.ia2, ia3: r.ia3, attendance: r.attendance }))];
+        }
+
+        function renderResults(results) {
+            const container = document.getElementById('resultsContainer');
+            if (!container) return;
+            container.innerHTML = "";
+            if (!results || results.length === 0) {
+                container.innerHTML = '<p>No results found.</p>';
+                return;
+            }
+            results.forEach(result => {
+                const ia1 = isNaN(result.ia1) ? 0 : result.ia1;
+                const ia2 = isNaN(result.ia2) ? 0 : result.ia2;
+                const ia3 = isNaN(result.ia3) ? 0 : result.ia3;
+                const average = ((ia1 + ia2 + ia3) / 3).toFixed(2);
+                const div = document.createElement('div');
+                div.className = 'result';
+                div.innerHTML = `
+      <p><strong>Subject:</strong> ${result.subject}</p>
+      <p><strong>IA1:</strong> ${ia1}</p>
+      <p><strong>IA2:</strong> ${ia2}</p>
+      <p><strong>IA3:</strong> ${ia3}</p>
+      <p><strong>Attendance:</strong> ${result.attendance}%</p>
+      <p class="average"><strong>Average IA Score:</strong> ${average}</p>
+      <p style="font-size:11px;color:#888;margin-top:4px;">Source: ${result.source}</p>
+    `;
+                container.appendChild(div);
+            });
+        }
+
+        /* Helpers to query backend */
+        async function fetchJson(url) {
+            const headers = {};
+            const token = getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+            const resp = await fetch(url, { headers });
+            const contentType = resp.headers.get("content-type") || "";
+            let body = null;
+            if (contentType.includes("application/json")) body = await resp.json().catch(() => null);
+            else body = await resp.text().catch(() => null);
+            return { status: resp.status, ok: resp.ok, body, resp };
+        }
+
+        async function findStudentIdFallback(loggedInStudentId, loggedInStudentName, loggedInStudentEmail) {
+            info("Attempting fallback mapping to Student.id using /api/students/");
+            const r = await fetchJson(`${API_BASE}/students/`);
+            info("/api/students/ status:", r.status);
+            if (!r.ok || !Array.isArray(r.body)) {
+                warn("students list not available or not an array:", r.body);
+                return null;
+            }
+            // show the returned students to console for debugging
+            info("Students list from backend:", r.body);
+
+            for (const s of r.body) {
+                const sid = s.id ?? s.student_id ?? null;
+                const email = s.email ?? (s.user && s.user.email) ?? s.user_email ?? null;
+                const full = s.full_name ?? s.name ?? (s.user && s.user.full_name) ?? s.student_name ?? null;
+                const userId = (s.user && (s.user.id ?? s.user_id)) ?? s.user_id ?? null;
+
+                // exact matches
+                if (loggedInStudentId && (String(sid) === String(loggedInStudentId) || String(userId) === String(loggedInStudentId))) {
+                    info("Found student.id matching loggedInStudentId or userId:", sid, s);
+                    return sid;
+                }
+                if (loggedInStudentEmail && email && email.toLowerCase() === String(loggedInStudentEmail).toLowerCase()) {
+                    info("Found student by email:", sid, s);
+                    return sid;
+                }
+                if (loggedInStudentName && full && full === loggedInStudentName) {
+                    info("Found student by name:", sid, s);
+                    return sid;
+                }
+            }
+            warn("Fallback mapping failed: no matching student.");
+            return null;
+        }
+
+        async function fetchResultsByStudentId(id) {
+            if (!id) return [];
+            const url = `${API_BASE}/results/?student_id=${encodeURIComponent(String(id))}`;
+            info("Fetching results by student_id:", id, "url:", url);
+            const r = await fetchJson(url);
+            info("Results fetch status:", r.status);
+            if (!r.ok) {
+                warn("Server results by id returned non-ok:", r.status, r.body);
+                return [];
+            }
+            if (!Array.isArray(r.body)) {
+                warn("Server returned non-array for results by id:", r.body);
+                return [];
+            }
+            return r.body.map(normalizeBackendResult);
+        }
+
+        async function fetchResultsByStudentName(name) {
+            if (!name) return [];
+            const url = `${API_BASE}/results/?student_name=${encodeURIComponent(String(name))}`;
+            info("Fetching results by student_name:", name);
+            const r = await fetchJson(url);
+            if (!r.ok || !Array.isArray(r.body)) {
+                warn("Results by name not found or bad response:", r.status, r.body);
+                return [];
+            }
+            return r.body.map(normalizeBackendResult);
+        }
+
+        /* Main loader */
+        async function loadResultsForCurrentStudent() {
+            let loggedInStudentId = localStorage.getItem('loggedInStudentId');
+            const loggedInStudentName = localStorage.getItem('loggedInStudentName');
+            const loggedInStudentEmail = localStorage.getItem('loggedInStudentEmail') || localStorage.getItem('loggedInStudentMail') || null;
+
+            info("Logged-in values:", { loggedInStudentId, loggedInStudentName, loggedInStudentEmail });
+
+            // If loggedInStudentId exists but is "0" or empty string treat as missing
+            if (loggedInStudentId === "0" || loggedInStudentId === "") {
+                warn("loggedInStudentId is 0 or empty — clearing it so fallback mapping will run.");
+                loggedInStudentId = null;
+                localStorage.removeItem('loggedInStudentId');
+            }
+
+            const localResults = loadLocalResults(loggedInStudentId, loggedInStudentName);
+            info("Local results count:", localResults.length);
+
+            let serverResults = [];
+
+            // 1) Try direct id
+            if (loggedInStudentId) {
+                serverResults = await fetchResultsByStudentId(loggedInStudentId);
+                info("[results] fetched by student_id:", serverResults.length);
+            }
+
+            // 2) If none, try by name
+            if ((!serverResults || serverResults.length === 0) && loggedInStudentName) {
+                const byName = await fetchResultsByStudentName(loggedInStudentName);
+                info("[results] fetched by student_name:", byName.length);
+                if (byName.length > 0) serverResults = byName;
+            }
+
+            // 3) If still none, attempt fallback mapping (User.id -> Student.id or email/name match)
+            if ((!serverResults || serverResults.length === 0) && (loggedInStudentId || loggedInStudentName || loggedInStudentEmail)) {
+                const mappedId = await findStudentIdFallback(loggedInStudentId, loggedInStudentName, loggedInStudentEmail);
+                if (mappedId) {
+                    info("Mapped to real Student.id:", mappedId);
+                    // store mapping for next time
+                    localStorage.setItem('loggedInStudentId', String(mappedId));
+                    // fetch by mapped id
+                    const byMapped = await fetchResultsByStudentId(mappedId);
+                    info("[results] fetched by mapped student_id:", byMapped.length);
+                    if (byMapped.length > 0) serverResults = byMapped;
+                }
+            }
+
+            // Final merge/render
+            const merged = mergeResults(serverResults, localResults);
+            info("Final merged results count:", merged.length);
+            if (merged.length === 0) {
+                showMessage("No results found for this student.", "error");
+                renderResults([]);
+            } else {
+                showMessage(serverResults.length ? "Results loaded from server (plus any local unsynced results)." : "Showing local results only (no server data).", "success");
+                renderResults(merged);
+            }
+        }
+
+        /* Start */
+        document.addEventListener('DOMContentLoaded', function () {
+            loadResultsForCurrentStudent().catch(e => {
+                err("Unhandled error in loadResultsForCurrentStudent:", e);
+                showMessage("Error loading results. Check console for details.", "error");
+            });
+        });
+    </script>
+
+
+
+</body>
+
+</html>

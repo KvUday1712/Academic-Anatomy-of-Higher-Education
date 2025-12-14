@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Course</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        label, input {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        input[type="submit"] {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin-top: 20px;
+            background-color: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .message.hidden {
+            display: none;
+        }
+        .message.error {
+            background:#ffe6e6;
+            color:#9a0b0b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Add New Course</h1>
+        <form id="addCourseForm">
+            <label for="courseName">Course Name:</label>
+            <input type="text" id="courseName" name="courseName" required>
+            <input type="submit" value="Add Course">
+        </form>
+
+        <div id="message" class="message hidden">
+            Course added successfully!
+        </div>
+
+        <a href="admin_dashboard.html">Go to admin-dashboard</a>
+    </div>
+
+    <script>
+    /**
+     * Changes made:
+     *  - Submits to backend POST /api/courses/ with JSON { name: "..."}
+     *  - Uses Authorization header if token present at localStorage.token
+     *  - On success caches courses into localStorage (key: 'courses')
+     *  - Falls back to localStorage-only if backend unreachable
+     *  - Shows inline success/error messages
+     *
+     * If your backend expects additional fields (code, description), either add inputs
+     * here or adapt the payload on the fetch call below.
+     */
+
+    const API_BASE = "/api"; // change to "http://localhost:5000/api" when frontend served separately
+
+    function showMessage(text, kind = "success") {
+      const el = document.getElementById("message");
+      el.textContent = text;
+      el.className = kind === "success" ? "message" : "message error";
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 4000);
+    }
+
+    function getToken() {
+      return localStorage.getItem("token") || null;
+    }
+
+    // Save course to localStorage cache (keeps previous format used by other pages)
+    function cacheCourseLocally(courseObjOrName) {
+      try {
+        const cached = JSON.parse(localStorage.getItem("courses") || "[]");
+        cached.push(courseObjOrName);
+        localStorage.setItem("courses", JSON.stringify(cached));
+      } catch (e) {
+        // fallback: overwrite with simple array
+        localStorage.setItem("courses", JSON.stringify([courseObjOrName]));
+      }
+    }
+
+    document.getElementById("addCourseForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+      const name = document.getElementById("courseName").value.trim();
+      if (!name) {
+        showMessage("Please enter a course name.", "error");
+        return;
+      }
+
+      // prepare payload - adjust keys if your backend expects different names
+      const payload = {
+        name: name
+      };
+
+      const headers = { "Content-Type": "application/json" };
+      const token = getToken();
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      try {
+        const resp = await fetch(`${API_BASE}/courses/`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        const json = await resp.json().catch(() => ({}));
+
+        if (resp.ok) {
+          // If backend returns created course object, use it for cache; otherwise cache name
+          const created = json.id || json.name ? json : { name };
+          cacheCourseLocally(created);
+          showMessage("Course added successfully.", "success");
+          document.getElementById("addCourseForm").reset();
+        } else {
+          // backend error
+          const errMsg = json.msg || json.error || `Server responded with ${resp.status}`;
+          showMessage("Error: " + errMsg, "error");
+
+          // Optionally cache locally if server error but you want to keep the course offline
+          // cacheCourseLocally({ name, offline: true, time: new Date().toISOString() });
+        }
+      } catch (err) {
+        // network or unreachable -> fallback to localStorage (keeps prior behavior)
+        console.error("Network error while adding course:", err);
+        cacheCourseLocally(name);
+        showMessage("Backend not reachable — course saved locally.", "success");
+        document.getElementById("addCourseForm").reset();
+      }
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Student</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+
+    .container {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      max-width: 600px;
+      margin: auto;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="email"],
+    .form-group input[type="password"],
+    .form-group select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    .form-group button {
+      padding: 10px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    .form-group button:hover {
+      background-color: #0056b3;
+    }
+
+    /* small inline message area */
+    #message {
+      margin-bottom: 12px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+
+    #message.success {
+      background: #e6ffed;
+      color: #087a3d;
+      border: 1px solid #bdf0cb;
+    }
+
+    #message.error {
+      background: #ffe6e6;
+      color: #9a0b0b;
+      border: 1px solid #f5bcbc;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <h1>Add Student</h1>
+
+    <!-- message box inserted to show success/error -->
+    <div id="message"></div>
+
+    <!-- NOTE: kept form id as studentForm (script uses this id) -->
+    <form id="studentForm">
+      <div class="form-group">
+        <label for="studentName">Name</label>
+        <input type="text" id="studentName" name="studentName" required>
+      </div>
+
+      <div class="form-group">
+        <label for="studentEmail">Email</label>
+        <input type="email" id="studentEmail" name="studentEmail" required>
+      </div>
+
+      <div class="form-group">
+        <label for="studentCourse">Course</label>
+        <select id="studentCourse" name="studentCourse" required>
+          <option value="">Select Course</option>
+          <!-- Options will be populated dynamically from API (or localStorage fallback) -->
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="studentPassword">Password</label>
+        <input type="password" id="studentPassword" name="studentPassword" required>
+      </div>
+
+      <div class="form-group">
+        <button type="submit">Add Student</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    const API_BASE = "/api"; // change to "http://127.0.0.1:5000/api" if frontend hosted separately
+
+    function showMessage(text, type = "success") {
+      const el = document.getElementById("message");
+      el.textContent = text;
+      el.className = type === "success" ? "success" : "error";
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 4000);
+    }
+
+    function getToken() {
+      return localStorage.getItem("token") || null;
+    }
+
+    // populate course select: try backend first, fallback to localStorage
+    async function populateCourses() {
+      const select = document.getElementById("studentCourse");
+      try {
+        const resp = await fetch(`${API_BASE}/courses/`);
+        if (!resp.ok) throw new Error("courses API not available");
+        const data = await resp.json();
+
+        select.innerHTML = '<option value="">Select Course</option>';
+        data.forEach(c => {
+          const opt = document.createElement("option");
+          // use course name as value (backend matches by name or code)
+          const name = c.name || c.code || c;
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+
+        // cache for fallback
+        localStorage.setItem("courses", JSON.stringify(data));
+      } catch (err) {
+        const fallback = JSON.parse(localStorage.getItem("courses") || "[]");
+        if (fallback.length) {
+          select.innerHTML = '<option value="">Select Course</option>';
+          fallback.forEach(c => {
+            const name = (typeof c === "string") ? c : (c.name || c.code || "");
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+          });
+        } else {
+          select.innerHTML = '<option value="">No courses available</option>';
+        }
+      }
+    }
+
+    document.getElementById("studentForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const fullName = document.getElementById("studentName").value.trim();
+      const email = document.getElementById("studentEmail").value.trim();
+      const courseValue = document.getElementById("studentCourse").value;
+      const password = document.getElementById("studentPassword").value;
+
+      if (!fullName || !email || !password || !courseValue) {
+        showMessage("Please fill all required fields.", "error");
+        return;
+      }
+
+      // 🔥 Match backend /api/students/ exactly:
+      const payload = {
+        name: fullName,        // backend expects "name"
+        email: email,          // backend expects "email"
+        course: courseValue,   // backend expects "course" (name or code)
+        password: password     // backend expects "password" (optional but we send it)
+      };
+
+      try {
+        const headers = { "Content-Type": "application/json" };
+        const token = getToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const resp = await fetch(`${API_BASE}/students/`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        const respJson = await resp.json().catch(() => ({}));
+
+        if (resp.ok) {
+          showMessage("Student added successfully.", "success");
+          document.getElementById("studentForm").reset();
+        } else {
+          const errMsg = respJson.error || respJson.msg || JSON.stringify(respJson) || `Server responded with ${resp.status}`;
+          showMessage("Error: " + errMsg, "error");
+        }
+      } catch (err) {
+        console.error("Submit error:", err);
+
+        // fallback to old localStorage behavior if backend is unreachable
+        const students = JSON.parse(localStorage.getItem("students") || "[]");
+        students.push({
+          name: fullName,
+          email: email,
+          course: courseValue,
+          password: password,
+          created_at: new Date().toISOString()
+        });
+        localStorage.setItem("students", JSON.stringify(students));
+        showMessage("Backend not reachable — saved locally.", "success");
+        document.getElementById("studentForm").reset();
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", populateCourses);
+  </script>
+
+</body>
+
+</html>

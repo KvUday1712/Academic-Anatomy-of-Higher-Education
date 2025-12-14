@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Courses</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        #message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+        #message.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #message.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+        .course-list {
+            margin-bottom: 20px;
+        }
+        .course-item {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        .course-main {
+            display: flex;
+            flex-direction: column;
+        }
+        .course-name {
+            font-weight: 600;
+        }
+        .course-code {
+            font-size: 12px;
+            color: #666;
+        }
+        .course-item button {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete {
+            background-color: #dc3545;
+            color: #fff;
+        }
+        .delete:hover {
+            background-color: #c82333;
+        }
+        .logout {
+            margin-top: 10px;
+            text-align: center;
+        }
+        .logout a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .logout a:hover {
+            text-decoration: underline;
+        }
+        #noCourses {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manage Courses</h1>
+
+        <div id="message"></div>
+
+        <div class="course-list" id="courseList">
+            <!-- Courses will be dynamically added here -->
+        </div>
+        <p id="noCourses" style="display:none;">No courses found.</p>
+
+        <div class="logout">
+            <a href="add-course.html">Add New Course</a>
+        </div>
+        <div class="logout">
+            <a href="admin_dashboard.html">Back to Dashboard</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if frontend is served separately
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const el = document.getElementById("message");
+            el.textContent = text;
+            el.className = type === "success" ? "success" : "error";
+            el.style.display = "block";
+            setTimeout(() => { el.style.display = "none"; }, 4000);
+        }
+
+        // Keep normalized courses here
+        let currentCourses = []; // { id, name, code, _source, localIndex }
+
+        function normalizeCourse(c, indexFromLocal = null, source = "server") {
+            if (typeof c === "string") {
+                return {
+                    id: null,
+                    name: c,
+                    code: "",
+                    _source: source,
+                    localIndex: indexFromLocal
+                };
+            }
+
+            return {
+                id: c.id || null,
+                name: c.name || c.title || "Untitled",
+                code: c.code || "",
+                _source: source,
+                localIndex: indexFromLocal
+            };
+        }
+
+        function renderCourses() {
+            const list = document.getElementById("courseList");
+            const noCourses = document.getElementById("noCourses");
+
+            list.innerHTML = "";
+
+            if (!currentCourses.length) {
+                noCourses.style.display = "block";
+                return;
+            }
+            noCourses.style.display = "none";
+
+            currentCourses.forEach((course, index) => {
+                const item = document.createElement("div");
+                item.className = "course-item";
+
+                const mainDiv = document.createElement("div");
+                mainDiv.className = "course-main";
+
+                const nameSpan = document.createElement("span");
+                nameSpan.className = "course-name";
+                nameSpan.textContent = course.name;
+
+                const codeSpan = document.createElement("span");
+                codeSpan.className = "course-code";
+                if (course.code) {
+                    codeSpan.textContent = `Code: ${course.code}`;
+                }
+
+                mainDiv.appendChild(nameSpan);
+                if (course.code) mainDiv.appendChild(codeSpan);
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.className = "delete";
+                deleteBtn.textContent = "Delete";
+                deleteBtn.onclick = () => deleteCourse(index);
+
+                item.appendChild(mainDiv);
+                item.appendChild(deleteBtn);
+
+                list.appendChild(item);
+            });
+        }
+
+        function readLocalCourses() {
+            try {
+                const stored = JSON.parse(localStorage.getItem("courses") || "[]");
+                return stored.map((c, idx) => normalizeCourse(c, idx, "local"));
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function loadCourses() {
+            currentCourses = [];
+
+            // Try backend first
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/courses/`, { headers });
+                if (!resp.ok) throw new Error("Bad response from backend");
+                const data = await resp.json();
+
+                if (Array.isArray(data)) {
+                    currentCourses = data.map(c => normalizeCourse(c, null, "server"));
+                }
+
+                // Cache in localStorage for offline
+                try {
+                    const cache = currentCourses.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        code: c.code
+                    }));
+                    localStorage.setItem("courses", JSON.stringify(cache));
+                } catch (e) {
+                    console.warn("Could not cache courses:", e);
+                }
+            } catch (err) {
+                console.warn("Could not load courses from backend, falling back to localStorage:", err);
+                currentCourses = readLocalCourses();
+            }
+
+            renderCourses();
+        }
+
+        async function deleteCourse(index) {
+            const course = currentCourses[index];
+            if (!course) return;
+
+            if (!confirm(`Are you sure you want to delete course "${course.name}"?`)) return;
+
+            // Helper: delete from localStorage
+            function deleteFromLocalStorage() {
+                try {
+                    const stored = JSON.parse(localStorage.getItem("courses") || "[]");
+                    let updated;
+                    if (typeof course.localIndex === "number") {
+                        updated = stored.filter((_, idx) => idx !== course.localIndex);
+                    } else {
+                        updated = stored.filter(c => {
+                            if (typeof c === "string") return c !== course.name;
+                            const name = c.name || c.title;
+                            const code = c.code || "";
+                            return !(name === course.name && code === course.code);
+                        });
+                    }
+                    localStorage.setItem("courses", JSON.stringify(updated));
+                } catch (e) {
+                    console.warn("Failed to update localStorage courses:", e);
+                }
+            }
+
+            // Try backend delete if we have an id
+            if (course.id !== null && course.id !== undefined) {
+                try {
+                    const headers = {};
+                    const token = getToken();
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                    const resp = await fetch(`${API_BASE}/courses/${course.id}`, {
+                        method: "DELETE",
+                        headers
+                    });
+
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                        showMessage("Error deleting course: " + err, "error");
+                        return;
+                    }
+
+                    deleteFromLocalStorage();
+                    showMessage("Course deleted successfully.", "success");
+                    currentCourses.splice(index, 1);
+                    renderCourses();
+                    return;
+                } catch (err) {
+                    console.error("Network error while deleting course, falling back to local-only delete:", err);
+                    // fall through to local-only
+                }
+            }
+
+            // Local-only delete
+            deleteFromLocalStorage();
+            showMessage("Course deleted locally.", "success");
+            currentCourses.splice(index, 1);
+            renderCourses();
+        }
+
+        window.deleteCourse = deleteCourse;
+
+        window.onload = loadCourses;
+    </script>
+</body>
+</html>

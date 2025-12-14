@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group select,
+        .form-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-group button {
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+        .form-group button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- //<h1>Staff Dashboard</h1> -->
+        <form id="resultForm">
+            <div class="form-group">
+                <label for="studentName">Student Name</label>
+                <select id="studentName" name="studentName" required>
+                    <option value="">Select Student</option>
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+            <!-- Other form fields for results -->
+            <div class="form-group">
+                <button type="submit">Add Result</button>
+            </div>
+        </form>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var staffCourse = localStorage.getItem('loggedInStaffCourse');
+            var studentsList = JSON.parse(localStorage.getItem('students')) || [];
+            var studentDropdown = document.getElementById('studentName');
+
+            if (staffCourse) {
+                var filteredStudents = studentsList.filter(student => student.course === staffCourse);
+
+                if (filteredStudents.length > 0) {
+                    filteredStudents.forEach(student => {
+                        var option = document.createElement('option');
+                        option.value = student.email; // Use email as the unique identifier
+                        option.textContent = student.name;
+                        studentDropdown.appendChild(option);
+                    });
+                } else {
+                    studentDropdown.innerHTML = '<option value="">No students available</option>';
+                }
+            } else {
+                studentDropdown.innerHTML = '<option value="">No students available</option>';
+            }
+
+            // Handle result form submission
+            document.getElementById('resultForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+                // Add result handling logic here
+            });
+        });
+    </script>
+</body>
+</html>

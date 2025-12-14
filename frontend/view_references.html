@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Reference Books</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 600px;
+            max-width: 95%;
+            text-align: center;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            display: none;
+        }
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+        .book-list {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .book-list ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .book-list li {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #e1e4e8;
+            background-color: #f9fafb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .book-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .book-main {
+            font-size: 14px;
+        }
+        .book-source {
+            font-size: 11px;
+            color: #777;
+            margin-top: 3px;
+        }
+        .book-actions {
+            white-space: nowrap;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .book-list a {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .book-list a:hover {
+            text-decoration: underline;
+        }
+        .book-list button {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-size: 13px;
+        }
+        .book-list button:hover {
+            background-color: #c82333;
+        }
+        .empty-text {
+            font-size: 14px;
+            color: #555;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 15px;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Manage Reference Books</h2>
+        <div id="messageBox"></div>
+        <div class="book-list">
+            <ul id="bookList"></ul>
+        </div>
+        <a href="staff_dashboard.html" class="back-link">Back to Dashboard</a>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if needed
+        let currentBooks = [];   // { id, author, title, pdf, source, localIndex }
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function normalizeLocalBook(b, index) {
+            return {
+                id: b.id || null,
+                author: b.author || "",
+                title: b.title || "",
+                pdf: b.pdf || "",
+                source: b.source || "local",
+                localIndex: index
+            };
+        }
+
+        function normalizeServerBook(b) {
+            const author =
+                b.author ||
+                b.author_name ||
+                (b.metadata && b.metadata.author) ||
+                "Unknown";
+            const title =
+                b.title ||
+                b.book_title ||
+                (b.metadata && b.metadata.title) ||
+                "Untitled";
+            const pdf =
+                b.pdf_url ||
+                b.file_url ||
+                b.url ||
+                "";
+
+            return {
+                id: b.id || null,
+                author,
+                title,
+                pdf,
+                source: "server",
+                localIndex: null
+            };
+        }
+
+        function loadLocalBooksRaw() {
+            try {
+                return JSON.parse(localStorage.getItem("bookList") || "[]");
+            } catch (e) {
+                console.warn("Error reading bookList from localStorage:", e);
+                return [];
+            }
+        }
+
+        function saveBooksToLocalStorage(books) {
+            try {
+                const simplified = books.map(b => ({
+                    id: b.id || null,
+                    author: b.author,
+                    title: b.title,
+                    pdf: b.pdf,
+                    source: b.source || "local"
+                }));
+                localStorage.setItem("bookList", JSON.stringify(simplified));
+            } catch (e) {
+                console.warn("Failed to save bookList to localStorage:", e);
+            }
+        }
+
+        function mergeBooks(serverBooks, localBooks) {
+            if (!serverBooks.length) return localBooks;
+
+            const keys = new Set(
+                serverBooks.map(b => `${b.author}|${b.title}|${b.pdf}`)
+            );
+
+            const extras = localBooks.filter(b => {
+                const key = `${b.author}|${b.title}|${b.pdf}`;
+                return !keys.has(key);
+            });
+
+            return [...serverBooks, ...extras];
+        }
+
+        function renderBooks() {
+            const listEl = document.getElementById("bookList");
+            listEl.innerHTML = "";
+
+            if (!currentBooks.length) {
+                const p = document.createElement("p");
+                p.className = "empty-text";
+                p.textContent = "No reference books available.";
+                listEl.appendChild(p);
+                return;
+            }
+
+            currentBooks.forEach((book, index) => {
+                const li = document.createElement("li");
+
+                const info = document.createElement("div");
+                info.className = "book-info";
+
+                const main = document.createElement("div");
+                main.className = "book-main";
+                main.textContent = `Author: ${book.author || "Unknown"}, Title: ${book.title || "Untitled"}`;
+
+                const src = document.createElement("div");
+                src.className = "book-source";
+                src.textContent = `Source: ${book.source === "server" ? "Server" : "Local"}`;
+
+                info.appendChild(main);
+                info.appendChild(src);
+
+                const actions = document.createElement("div");
+                actions.className = "book-actions";
+
+                const pdfLink = document.createElement("a");
+                if (book.pdf) {
+                    pdfLink.href = book.pdf;
+                    pdfLink.textContent = "Open PDF";
+                    pdfLink.target = "_blank";
+                    pdfLink.rel = "noopener noreferrer";
+                } else {
+                    pdfLink.textContent = "No PDF";
+                    pdfLink.style.color = "#999";
+                }
+
+                const delBtn = document.createElement("button");
+                delBtn.textContent = "Delete";
+                delBtn.onclick = () => deleteBook(index);
+
+                actions.appendChild(pdfLink);
+                actions.appendChild(delBtn);
+
+                li.appendChild(info);
+                li.appendChild(actions);
+                listEl.appendChild(li);
+            });
+        }
+
+        function deleteFromLocalStorage(book) {
+            const raw = loadLocalBooksRaw();
+            let updated;
+            if (typeof book.localIndex === "number") {
+                updated = raw.filter((_, idx) => idx !== book.localIndex);
+            } else {
+                updated = raw.filter(b => {
+                    const author = b.author || "";
+                    const title = b.title || "";
+                    const pdf = b.pdf || "";
+                    return !(
+                        author === book.author &&
+                        title === book.title &&
+                        pdf === book.pdf
+                    );
+                });
+            }
+            localStorage.setItem("bookList", JSON.stringify(updated));
+        }
+
+        async function deleteBook(index) {
+            const book = currentBooks[index];
+            if (!book) return;
+
+            if (!confirm(`Are you sure you want to delete "${book.title}" by ${book.author}?`)) {
+                return;
+            }
+
+            // Try backend delete if id exists
+            if (book.id !== null && book.id !== undefined) {
+                try {
+                    const headers = {};
+                    const token = getToken();
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                    const resp = await fetch(`${API_BASE}/reference-books/${book.id}`, {
+                        method: "DELETE",
+                        headers
+                    });
+
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                        console.warn("Server delete error:", err);
+                        // fallback → local-only delete
+                        deleteFromLocalStorage(book);
+                        currentBooks.splice(index, 1);
+                        renderBooks();
+                        showMessage("Book deleted locally (server error).", "error");
+                        return;
+                    }
+
+                    // success: remove from local as well
+                    deleteFromLocalStorage(book);
+                    currentBooks.splice(index, 1);
+                    renderBooks();
+                    saveBooksToLocalStorage(currentBooks);
+                    showMessage("Reference book deleted successfully.", "success");
+                    return;
+                } catch (err) {
+                    console.error("Network error deleting book:", err);
+                    // fallback → local-only delete
+                    deleteFromLocalStorage(book);
+                    currentBooks.splice(index, 1);
+                    renderBooks();
+                    showMessage("Book deleted locally (network error).", "error");
+                    return;
+                }
+            }
+
+            // No id → purely local book
+            deleteFromLocalStorage(book);
+            currentBooks.splice(index, 1);
+            renderBooks();
+            showMessage("Reference book deleted from local data.", "success");
+        }
+
+        async function loadBooks() {
+            const rawLocal = loadLocalBooksRaw();
+            let localBooks = rawLocal.map((b, idx) => normalizeLocalBook(b, idx));
+            let serverBooks = [];
+
+            // Try backend GET
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/reference-books/`, { headers });
+
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                    console.warn("Error loading reference books from server:", err);
+                    showMessage("Showing local reference books (server error).", "error");
+                    currentBooks = localBooks;
+                    renderBooks();
+                    return;
+                }
+
+                const data = await resp.json();
+                if (Array.isArray(data)) {
+                    serverBooks = data.map(normalizeServerBook);
+                }
+            } catch (err) {
+                console.error("Network error loading reference books:", err);
+                showMessage("Showing local reference books (network error).", "error");
+                currentBooks = localBooks;
+                renderBooks();
+                return;
+            }
+
+            // Merge & save
+            const merged = mergeBooks(serverBooks, localBooks);
+            currentBooks = merged;
+            saveBooksToLocalStorage(merged);
+
+            if (serverBooks.length) {
+                showMessage("Reference books loaded from server (plus local items).", "success");
+            } else if (localBooks.length) {
+                showMessage("Showing local reference books only.", "error");
+            } else {
+                showMessage("No reference books found.", "error");
+            }
+
+            renderBooks();
+        }
+
+        document.addEventListener("DOMContentLoaded", loadBooks);
+        window.deleteBook = deleteBook;
+    </script>
+</body>
+</html>

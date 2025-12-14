@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Autonomy of Higher Education</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Link to the CSS file -->
+    <style>
+        /* Reset some default browser styles */
+        body,
+        h1,
+        h2,
+        p,
+        ul {
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            background: url("/bitm.jpg");
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            height: 100vh;
+        }
+
+        /* Header styles */
+        header {
+            background-color: #333;
+            color: #fff;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        #user-greeting {
+            position: absolute;
+            right: 20px;
+            bottom: 10px;
+            font-size: 0.9rem;
+            color: #ddd;
+        }
+
+        /* Navigation bar styles */
+        nav ul {
+            list-style-type: none;
+            background-color: #444;
+            overflow: hidden;
+        }
+
+        nav ul li {
+            float: left;
+        }
+
+        nav ul li a {
+            display: block;
+            padding: 14px 20px;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        nav ul li a:hover {
+            background-color: #555;
+        }
+
+        /* Main content styles */
+        main {
+            padding: 20px;
+            min-height: calc(100vh - 160px);
+        }
+
+        section h2 {
+            margin-bottom: 10px;
+        }
+
+        section p {
+            margin-bottom: 20px;
+        }
+
+        /* Footer styles */
+        footer {
+            text-align: center;
+            padding: 10px;
+            background-color: #333;
+            color: #fff;
+            position: relative;
+            width: 100%;
+            bottom: 0;
+        }
+
+        .clearfix::after {
+            content: "";
+            display: table;
+            clear: both;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Welcome To Academic Autonomy of Higher Education</h1>
+        <div id="user-greeting"></div>
+    </header>
+    <nav>
+        <ul class="clearfix">
+            <li><a href="main.html">Home</a></li>
+            <li><a href="About.html">About</a></li>
+            <li><a href="contact.html">Contact</a></li>
+            <!-- Dashboard link will be shown only when logged in -->
+            <li id="dashboardNav" style="display:none;">
+                <a href="#" id="dashboardLink">Dashboard</a>
+            </li>
+            <!-- Login / Logout item -->
+            <li id="authNav">
+                <a href="login.html" id="authLink">Login</a>
+            </li>
+        </ul>
+    </nav>
+
+    <main>
+        <!-- Optional welcome text, purely cosmetic -->
+        <section>
+            <h2>Empowering Academic Performance Tracking</h2>
+            <p>
+                This portal helps administrators, staff, and students manage courses, attendance,
+                results, and more in an autonomous academic environment.
+            </p>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Academic Autonomy of Higher Education. All rights reserved.</p>
+    </footer>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if frontend served separately
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function clearAuthData() {
+            localStorage.removeItem("token");
+            localStorage.removeItem("loggedInStudentId");
+            localStorage.removeItem("loggedInStudentName");
+            localStorage.removeItem("loggedInStaffCourse");
+            localStorage.removeItem("userRole");
+        }
+
+        async function loadCurrentUser() {
+            const token = getToken();
+            const greetingEl = document.getElementById("user-greeting");
+            const dashboardNav = document.getElementById("dashboardNav");
+            const dashboardLink = document.getElementById("dashboardLink");
+            const authLink = document.getElementById("authLink");
+
+            // default: show Login
+            authLink.textContent = "Login";
+            authLink.href = "login.html";
+            dashboardNav.style.display = "none";
+            greetingEl.textContent = "";
+
+            if (!token) {
+                return;
+            }
+
+            try {
+                const headers = { "Authorization": `Bearer ${token}` };
+                const resp = await fetch(`${API_BASE}/auth/me`, { headers });
+
+                if (!resp.ok) {
+                    // invalid / expired token
+                    clearAuthData();
+                    return;
+                }
+
+                const data = await resp.json();
+                // You can adjust these keys according to your backend's response
+                const name =
+                    data.full_name ||
+                    data.name ||
+                    (data.user && data.user.full_name) ||
+                    (data.user && data.user.username) ||
+                    "User";
+
+                const role =
+                    data.role ||
+                    data.user_type ||
+                    data.type ||
+                    "user";
+
+                // store role for other pages if needed
+                localStorage.setItem("userRole", role);
+
+                // Greeting
+                greetingEl.textContent = `Hello, ${name} (${role})`;
+
+                // Dashboard link based on role
+                let dashboardHref = "#";
+                if (role.toLowerCase() === "admin") {
+                    dashboardHref = "admin_dashboard.html";
+                } else if (role.toLowerCase() === "staff") {
+                    dashboardHref = "staff_dashboard.html";
+                } else if (role.toLowerCase() === "student") {
+                    dashboardHref = "student_dashboard.html";
+                }
+
+                if (dashboardHref !== "#") {
+                    dashboardLink.href = dashboardHref;
+                    dashboardNav.style.display = "block";
+                }
+
+                // Turn Login into Logout
+                authLink.textContent = "Logout";
+                authLink.href = "#";
+                authLink.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    clearAuthData();
+                    // simple redirect to login
+                    window.location.href = "login.html";
+                });
+            } catch (err) {
+                console.error("Error loading current user:", err);
+                clearAuthData();
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", loadCurrentUser);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Staff</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+        }
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group input[type="password"],
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group button {
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+        .back-link {
+            display: inline-block;
+            margin-top: 15px;
+            text-align: center;
+            color: #007bff;
+            text-decoration: none;
+            width: 100%;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        .hint {
+            margin-top: 8px;
+            font-size: 0.8em;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Add Staff</h1>
+
+        <div id="messageBox"></div>
+
+        <form id="addStaffForm">
+            <div class="form-group">
+                <label for="staffName">Name</label>
+                <input type="text" id="staffName" name="staffName" required>
+            </div>
+            <div class="form-group">
+                <label for="staffEmail">Email</label>
+                <input type="email" id="staffEmail" name="staffEmail" required>
+            </div>
+            <div class="form-group">
+                <label for="staffCourse">Course</label>
+                <select id="staffCourse" name="staffCourse" required>
+                    <option value="">Select Course</option>
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="staffPassword">Password</label>
+                <input type="password" id="staffPassword" name="staffPassword" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Submit</button>
+            </div>
+        </form>
+
+        <a href="admin_dashboard.html" class="back-link">Go to Admin Dashboard</a>
+        <div class="hint">
+            If the server is unavailable, staff will be saved only in this browser (local mode).
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if needed
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function loadCoursesFromLocal() {
+            try {
+                return JSON.parse(localStorage.getItem('courses') || "[]");
+            } catch (e) {
+                console.warn("Error reading courses from localStorage:", e);
+                return [];
+            }
+        }
+
+        function populateCourseOptions(courses) {
+            const courseSelect = document.getElementById('staffCourse');
+            courseSelect.innerHTML = '<option value="">Select Course</option>';
+            courses.forEach(function(course) {
+                const option = document.createElement('option');
+                option.value = typeof course === "string" ? course : (course.name || course.code || "");
+                option.textContent = option.value;
+                if (option.value) {
+                    courseSelect.appendChild(option);
+                }
+            });
+        }
+
+        async function loadCourses() {
+            let courses = [];
+            // Try backend first
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/courses/`, { headers });
+                if (!resp.ok) throw new Error("Bad response from backend");
+                const data = await resp.json();
+                if (Array.isArray(data)) {
+                    courses = data.map(c => c.name || c.code || "");
+                }
+                // Save to local storage for other pages
+                localStorage.setItem("courses", JSON.stringify(courses));
+            } catch (err) {
+                console.warn("Could not load courses from backend, using localStorage:", err);
+                courses = loadCoursesFromLocal();
+            }
+
+            populateCourseOptions(courses);
+        }
+
+        function saveStaffLocally(staff) {
+            try {
+                const staffMembers = JSON.parse(localStorage.getItem('staffMembers') || "[]");
+                staffMembers.push(staff);
+                localStorage.setItem('staffMembers', JSON.stringify(staffMembers));
+            } catch (e) {
+                console.warn("Failed to save staff to localStorage:", e);
+            }
+        }
+
+        async function handleAddStaff(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('staffName').value.trim();
+            const email = document.getElementById('staffEmail').value.trim();
+            const course = document.getElementById('staffCourse').value;
+            const password = document.getElementById('staffPassword').value;
+
+            if (!name || !email || !course || !password) {
+                showMessage("Please fill in all fields.", "error");
+                return;
+            }
+
+            const staffObjForLocal = {
+                name: name,
+                email: email,
+                course: course,
+                password: password
+            };
+
+            // Always save locally for compatibility
+            saveStaffLocally(staffObjForLocal);
+
+            // Try backend POST
+            try {
+                const headers = { "Content-Type": "application/json" };
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const payload = {
+                    name: name,
+                    email: email,
+                    course: course,
+                    password: password,
+                    role: "staff"
+                };
+
+                const resp = await fetch(`${API_BASE}/staff/`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                    console.warn("Server error while adding staff:", err);
+                    showMessage("Staff saved locally (server error).", "error");
+                } else {
+                    showMessage("Staff added successfully.", "success");
+                }
+            } catch (err) {
+                console.error("Network error while adding staff:", err);
+                showMessage("Staff saved locally (network error).", "error");
+            }
+
+            document.getElementById('addStaffForm').reset();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCourses();
+            document
+                .getElementById('addStaffForm')
+                .addEventListener('submit', handleAddStaff);
+        });
+    </script>
+</body>
+</html>

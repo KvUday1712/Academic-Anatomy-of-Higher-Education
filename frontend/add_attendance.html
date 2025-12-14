@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Attendance</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            max-width: 90%;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .form-group select,
+        .form-group input[type="checkbox"] {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group select:focus,
+        .form-group input[type="checkbox"]:focus {
+            border-color: #007bff;
+        }
+
+        #studentList label {
+            margin-left: 8px;
+            font-weight: normal;
+            color: #333;
+        }
+
+        #studentList .student-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group button {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+
+        #studentList p {
+            text-align: center;
+            color: #888;
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Add Attendance</h1>
+
+        <div id="messageBox"></div>
+
+        <form id="attendanceForm">
+            <div class="form-group">
+                <label for="date">Select Date</label>
+                <select id="date" name="date" required></select>
+            </div>
+            <div class="form-group">
+                <label for="month">Select Month</label>
+                <select id="month" name="month" required>
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="year">Select Year</label>
+                <select id="year" name="year" required></select>
+            </div>
+            <div id="studentList">
+                <label>Mark Absentees:</label>
+                <!-- Student checkboxes will be populated dynamically -->
+            </div>
+            <div class="form-group">
+                <button type="submit">Submit Attendance</button>
+            </div>
+        </form>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const dateDropdown = document.getElementById('date');
+            const monthDropdown = document.getElementById('month');
+            const yearDropdown = document.getElementById('year');
+            const studentList = document.getElementById('studentList');
+
+            if (!dateDropdown || !monthDropdown || !yearDropdown || !studentList) {
+                console.error('One or more required elements (date/month/year/studentList) not found.');
+                return;
+            }
+
+            // Helper to clear and set a placeholder option
+            function setPlaceholder(selectEl, placeholderText) {
+                selectEl.innerHTML = '';
+                const ph = document.createElement('option');
+                ph.value = '';
+                ph.textContent = placeholderText;
+                ph.disabled = true;
+                ph.selected = true;
+                selectEl.appendChild(ph);
+            }
+
+            // Populate date dropdown (1-31) and set today's date as default
+            setPlaceholder(dateDropdown, 'Select Date');
+            const today = new Date();
+            const todayDate = today.getDate();
+            for (let i = 1; i <= 31; i++) {
+                const option = document.createElement('option');
+                // keep a consistent two-digit value for easier backend formatting if needed
+                option.value = i < 10 ? '0' + i : String(i);
+                option.textContent = i;
+                dateDropdown.appendChild(option);
+            }
+            // Set default selected to today's day if within 1..31
+            if (todayDate >= 1 && todayDate <= 31) {
+                dateDropdown.value = todayDate < 10 ? '0' + todayDate : String(todayDate);
+            }
+
+            // Ensure month dropdown has values '01'..'12' and select current month
+            // If your HTML already contains month options, we still normalize values and default
+            const monthNames = [
+                'January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'
+            ];
+
+            // if monthDropdown already has options, replace them to guarantee numeric values
+            setPlaceholder(monthDropdown, 'Select Month');
+            monthNames.forEach((m, idx) => {
+                const option = document.createElement('option');
+                const num = idx + 1;
+                option.value = num < 10 ? '0' + num : String(num);
+                option.textContent = m;
+                monthDropdown.appendChild(option);
+            });
+            const todayMonth = today.getMonth() + 1;
+            monthDropdown.value = todayMonth < 10 ? '0' + todayMonth : String(todayMonth);
+
+            // Populate year dropdown (currentYear -5 .. currentYear +5) and default to current year
+            const currentYear = today.getFullYear();
+            setPlaceholder(yearDropdown, 'Select Year');
+            for (let y = currentYear - 5; y <= currentYear + 5; y++) {
+                const option = document.createElement('option');
+                option.value = String(y);
+                option.textContent = String(y);
+                yearDropdown.appendChild(option);
+            }
+            yearDropdown.value = String(currentYear);
+
+            // ---------- Student list population (unchanged logic, defensive) ----------
+            // Get staff course and student data from localStorage
+            const staffCourse = localStorage.getItem('loggedInStaffCourse');
+            const studentsList = JSON.parse(localStorage.getItem('students')) || [];
+
+            // Filter students based on staff's course
+            if (staffCourse) {
+                const filteredStudents = studentsList.filter(student => student.course === staffCourse);
+
+                if (filteredStudents.length > 0) {
+                    // Clear any placeholder text inside studentList
+                    studentList.innerHTML = '<label>Mark Absentees:</label>';
+
+                    filteredStudents.forEach((student, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'form-group';
+
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = 'student-' + index;
+                        checkbox.value = student.name || student.full_name || student.email || '';
+
+                        const label = document.createElement('label');
+                        label.htmlFor = 'student-' + index;
+                        label.textContent = student.name || student.full_name || student.email || 'Unknown';
+
+                        div.style.display = 'flex';
+                        div.style.alignItems = 'center';
+                        div.style.gap = '10px';
+                        div.appendChild(label);
+                        // place checkbox to the right like your screenshot (label then checkbox)
+                        div.insertBefore(checkbox, label.nextSibling);
+
+                        studentList.appendChild(div);
+                    });
+                } else {
+                    studentList.innerHTML = '<p style="text-align:center;color:#888;font-style:italic;">No students available for your course</p>';
+                }
+            } else {
+                studentList.innerHTML = '<p style="text-align:center;color:#888;font-style:italic;">No course data found</p>';
+            }
+
+            // ---------- Form submission ----------
+            document.getElementById('attendanceForm').addEventListener('submit', function (event) {
+                event.preventDefault();
+
+                const selectedDate = dateDropdown.value;
+                const selectedMonth = monthDropdown.value;
+                const selectedYear = yearDropdown.value;
+
+                if (!selectedDate || !selectedMonth || !selectedYear) {
+                    alert('Please select date, month and year.');
+                    return;
+                }
+
+                const key = `${selectedYear}-${selectedMonth}-${selectedDate}`;
+                const absentees = [];
+                const checkboxes = document.querySelectorAll('#studentList input[type="checkbox"]:checked');
+                checkboxes.forEach(function (checkbox) {
+                    absentees.push(checkbox.value);
+                });
+
+                const attendanceData = JSON.parse(localStorage.getItem('attendanceData')) || {};
+                attendanceData[key] = absentees;
+                localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+
+                alert('Attendance submitted successfully!');
+                // optionally reset the form fields
+                document.getElementById('attendanceForm').reset();
+                // restore defaults
+                dateDropdown.value = todayDate < 10 ? '0' + todayDate : String(todayDate);
+                monthDropdown.value = todayMonth < 10 ? '0' + todayMonth : String(todayMonth);
+                yearDropdown.value = String(currentYear);
+            });
+        });
+    </script>
+
+
+</body>
+
+</html>

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Administrator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        header {
+            background-color: #4caf50;
+            color: #fff;
+            padding: 2em 0;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 0.5em;
+        }
+
+        nav {
+            background-color: #333;
+            color: #fff;
+            padding: 1em;
+            text-align: center;
+        }
+
+        nav a {
+            color: #fff;
+            text-decoration: none;
+            margin: 0 1em;
+            font-size: 1.2em;
+        }
+
+        main {
+            padding: 2em;
+            max-width: 900px;
+            margin: 20px auto 80px auto;
+        }
+
+        section {
+            padding: 2em;
+            background-color: #fff;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: #4caf50;
+        }
+
+        .contact-details {
+            margin-top: 20px;
+            font-size: 1.1em;
+            text-align: left;
+        }
+
+        .contact-details p {
+            margin: 8px 0;
+        }
+
+        .contact-form {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .contact-form label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 600;
+        }
+
+        .contact-form input,
+        .contact-form textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 14px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+
+        .contact-form textarea {
+            resize: vertical;
+            min-height: 120px;
+        }
+
+        .contact-form button {
+            padding: 10px 18px;
+            background-color: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .contact-form button:hover {
+            background-color: #43a047;
+        }
+
+        #messageBox {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 6px;
+            display: none;
+            font-size: 0.95em;
+        }
+
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+
+        footer {
+            background-color: #333;
+            color: #fff;
+            padding: 1.5em 0;
+            text-align: center;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+        footer p {
+            margin: 0;
+        }
+
+        @media (max-width: 600px) {
+            header { padding: 1.5em 0; }
+            h1 { font-size: 2em; }
+            main { padding: 1em; margin: 10px auto 80px auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Contact Administrator</h1>
+    </header>
+
+    <nav>
+        <a href="main.html">Home</a>
+    </nav>
+
+    <main>
+        <section>
+            <h2>Contact Details</h2>
+            <p>Contact our administrator for assistance or inquiries:</p>
+
+            <div class="contact-details">
+                <p><strong>Name:</strong> VASUDENDRA D</p>
+                <p><strong>Email:</strong> vasudendra45@gmail.com</p>
+                <p><strong>Phone:</strong> +91 9019055290</p>
+            </div>
+        </section>
+
+        <section>
+            <h2>Send a Message</h2>
+
+            <!-- status messages -->
+            <div id="messageBox"></div>
+
+            <form id="contactForm" class="contact-form">
+                <label for="name">Your Name</label>
+                <input type="text" id="name" name="name" placeholder="Enter your name" required>
+
+                <label for="email">Your Email</label>
+                <input type="email" id="email" name="email" placeholder="Enter your email" required>
+
+                <label for="message">Your Message</label>
+                <textarea id="message" name="message" placeholder="Type your message here..." required></textarea>
+
+                <button type="submit">
+                    <i class="fas fa-paper-plane"></i> Send Message
+                </button>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Academic Autonomy of Higher Education. All rights reserved.</p>
+    </footer>
+
+    <script>
+        // Backend base URL (adjust if frontend is served separately, e.g., "http://localhost:5000/api")
+        const API_BASE = "/api";
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessageBox(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function cacheContactMessageLocally(msgObj) {
+            try {
+                const stored = JSON.parse(localStorage.getItem("contactMessages") || "[]");
+                stored.push(msgObj);
+                localStorage.setItem("contactMessages", JSON.stringify(stored));
+            } catch (e) {
+                // fallback ignore
+            }
+        }
+
+        document.getElementById("contactForm").addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const name = document.getElementById("name").value.trim();
+            const email = document.getElementById("email").value.trim();
+            const messageText = document.getElementById("message").value.trim();
+
+            if (!name || !email || !messageText) {
+                showMessageBox("Please fill all fields before submitting.", "error");
+                return;
+            }
+
+            const payload = {
+                name: name,
+                email: email,
+                message: messageText
+            };
+
+            const headers = { "Content-Type": "application/json" };
+            const token = getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            try {
+                // Backend endpoint you should implement: POST /api/contact-messages/
+                const resp = await fetch(`${API_BASE}/contact-messages/`, {
+                    method: "POST",
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await resp.json().catch(() => ({}));
+
+                if (resp.ok) {
+                    cacheContactMessageLocally({
+                        ...payload,
+                        server_id: data.id || null,
+                        sent_at: new Date().toISOString()
+                    });
+                    showMessageBox("Message sent successfully. The administrator will contact you soon.", "success");
+                    document.getElementById("contactForm").reset();
+                } else {
+                    const err = data.msg || data.error || `Server error (${resp.status})`;
+                    showMessageBox("Error sending message: " + err, "error");
+                }
+            } catch (err) {
+                console.error("Network error sending contact message:", err);
+                // Fallback: store locally only
+                cacheContactMessageLocally({
+                    ...payload,
+                    offline: true,
+                    sent_at: new Date().toISOString()
+                });
+                showMessageBox("Server not reachable — message saved locally.", "success");
+                document.getElementById("contactForm").reset();
+            }
+        });
+    </script>
+</body>
+</html>

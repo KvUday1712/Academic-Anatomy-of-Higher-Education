@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        .menu {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .menu li {
+            margin-bottom: 15px;
+        }
+
+        .menu li a {
+            display: block;
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .menu li a:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>Staff Dashboard</h2>
+        <ul class="menu">
+            <li><a href="add_result.html">Add Result</a></li>
+            <li><a href="add_attendance.html">Add Attendance</a></li>
+            <li><a href="mange_attendence.html">Manage Attendance</a></li>
+            <li><a href="reference_book.html">Reference Book</a></li>
+            <li><a href="login.html">logout</a></li>
+        </ul>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const role = localStorage.getItem('userRole');
+            const name = localStorage.getItem('loggedInStaffName');
+            const course = localStorage.getItem('loggedInStaffCourse');
+
+            if (role !== 'staff' || !name) {
+                // Not a logged-in staff → back to login
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // Example: show name/course somewhere if you have placeholders:
+            // document.getElementById('staffName').textContent = name;
+            // document.getElementById('staffCourse').textContent = course || "N/A";
+        });
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Result</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .form-group select,
+        .form-group input[type="number"],
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .form-group button {
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+
+        .form-group button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: rgb(255, 0, 0);
+            font-size: 0.9em;
+            margin-top: 10px;
+            min-height: 18px;
+        }
+
+        .result-display {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Add Result</h1>
+
+        <div id="messageBox"></div>
+
+        <form id="addResultForm">
+            <div class="form-group">
+                <label for="studentName">Student Name</label>
+                <select id="studentName" name="studentName" required>
+                    <option value="">Select Student</option>
+                    <!-- Options will be populated dynamically -->
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="subjectName">Subject</label>
+                <input type="text" id="subjectName" name="subjectName" required>
+            </div>
+            <div class="form-group">
+                <label for="ia1">IA1</label>
+                <input type="number" id="ia1" name="ia1" min="0" max="100" required>
+            </div>
+            <div class="form-group">
+                <label for="ia2">IA2</label>
+                <input type="number" id="ia2" name="ia2" min="0" max="100" required>
+            </div>
+            <div class="form-group">
+                <label for="ia3">IA3</label>
+                <input type="number" id="ia3" name="ia3" min="0" max="100" required>
+            </div>
+            <div class="form-group">
+                <label for="attendance">Attendance (%)</label>
+                <input type="number" id="attendance" name="attendance" min="0" max="100" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Add Result</button>
+            </div>
+            <div class="error-message" id="error-message"></div>
+        </form>
+        <div class="result-display" id="resultDisplay"></div>
+    </div>
+
+    <script>
+        // Base API (adjust if frontend served from different origin)
+        const API_BASE = "/api";
+
+        // Return token if present (used to send Authorization header)
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        // Normalize various shapes of student objects into a consistent small record
+        function normalizeStudent(s) {
+            const out = { id: null, name: "Unknown", email: "", course: "", _raw: s };
+
+            // defensive: if s is a JSON string accidentally, try parse
+            if (typeof s === "string") {
+                try { s = JSON.parse(s); } catch (e) { /* ignore parse error */ }
+            }
+            s = s || {};
+
+            // IDs: many possible names
+            out.id =
+                s.id ??
+                s.student_id ??
+                s.user_id ??
+                (s.user && (s.user.id ?? s.user.user_id)) ??
+                (s.user && s.userId) ??
+                null;
+
+            // name: many places a name might appear
+            const first = s.first_name ?? s.firstName ?? null;
+            const last = s.last_name ?? s.lastName ?? null;
+            const firstLast = first && last ? `${first} ${last}` : null;
+
+            out.name =
+                s.name ??
+                s.full_name ??
+                (s.user && (s.user.full_name ?? s.user.name)) ??
+                s.student_name ??
+                firstLast ??
+                s.display_name ??
+                s.title ??
+                "Unknown";
+
+            // email
+            out.email = s.email ?? (s.user && s.user.email) ?? s.user_email ?? "";
+
+            // course
+            out.course =
+                s.course ??
+                s.course_name ??
+                (s.course_obj && (s.course_obj.name || s.course_obj.code)) ??
+                s.courseCode ??
+                (s.user && s.user.course) ??
+                "";
+
+            out._raw = s;
+            return out;
+        }
+
+        // Main loader: fetch students (filtered first), normalize, filter by course tolerant,
+        // and populate the #studentName select.
+        async function loadStudentsForStaff() {
+            const studentNameSelect = document.getElementById('studentName');
+            if (!studentNameSelect) {
+                console.error("[loadStudentsForStaff] No element with id 'studentName' found.");
+                return;
+            }
+
+            // Show interim state
+            studentNameSelect.innerHTML = '<option value="">Loading...</option>';
+
+            const loggedInStaffCourseRaw = localStorage.getItem('loggedInStaffCourse');
+            const loggedInStaffCourse = loggedInStaffCourseRaw ? String(loggedInStaffCourseRaw).trim() : "";
+            console.info("[loadStudentsForStaff] loggedInStaffCourse (raw):", loggedInStaffCourseRaw, "=> trimmed:", loggedInStaffCourse);
+
+            const token = getToken();
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+            let students = [];
+
+            // Try filtered call (only when we have a non-empty course)
+            if (loggedInStaffCourse) {
+                try {
+                    const url = `${API_BASE}/students/?course=${encodeURIComponent(loggedInStaffCourse)}`;
+                    console.debug("[loadStudentsForStaff] Trying filtered URL:", url);
+                    const resp = await fetch(url, { headers });
+                    console.debug("[loadStudentsForStaff] filtered resp status:", resp.status);
+                    if (resp.ok) {
+                        const json = await resp.json().catch(() => null);
+                        // normalize received shape to an array
+                        if (Array.isArray(json)) students = json;
+                        else if (json && Array.isArray(json.students)) students = json.students;
+                        else if (json && Array.isArray(json.data)) students = json.data;
+                        else if (json && (json.id || json.user || json.full_name || json.name)) students = [json];
+                    } else {
+                        console.warn("[loadStudentsForStaff] filtered request returned non-OK:", resp.status);
+                    }
+                } catch (e) {
+                    console.warn("[loadStudentsForStaff] filtered fetch error:", e);
+                }
+            }
+
+            // If filtered didn't return results, try unfiltered GET /api/students/
+            if (!students.length) {
+                try {
+                    const url2 = `${API_BASE}/students/`;
+                    console.debug("[loadStudentsForStaff] Trying unfiltered URL:", url2);
+                    const r2 = await fetch(url2, { headers });
+                    console.debug("[loadStudentsForStaff] unfiltered resp status:", r2.status);
+                    if (r2.ok) {
+                        const json2 = await r2.json().catch(() => null);
+                        if (Array.isArray(json2)) students = json2;
+                        else if (json2 && Array.isArray(json2.students)) students = json2.students;
+                        else if (json2 && Array.isArray(json2.data)) students = json2.data;
+                        else if (json2 && (json2.id || json2.user || json2.full_name || json2.name)) students = [json2];
+                    } else {
+                        console.warn("[loadStudentsForStaff] unfiltered request returned non-OK:", r2.status);
+                    }
+                } catch (e) {
+                    console.warn("[loadStudentsForStaff] unfiltered fetch error:", e);
+                }
+            }
+
+            // Fallback to localStorage if remote calls produced nothing
+            if (!students.length) {
+                try {
+                    const local = JSON.parse(localStorage.getItem('students') || "[]");
+                    if (Array.isArray(local) && local.length) {
+                        students = local;
+                        console.info("[loadStudentsForStaff] Using localStorage students fallback. Count:", local.length);
+                    }
+                } catch (e) {
+                    console.warn("[loadStudentsForStaff] Failed parsing localStorage students:", e);
+                }
+            }
+
+            // Map and normalize
+            students = (students || []).map(normalizeStudent);
+            console.debug("[loadStudentsForStaff] Normalized students (pre-filter):", students);
+
+            // Filter by course with case-insensitive trimmed comparison.
+            if (loggedInStaffCourse) {
+                const lc = String(loggedInStaffCourse).trim().toLowerCase();
+                students = students.filter(s => {
+                    const sc = String(s.course || "").trim().toLowerCase();
+                    // If student has no course, keep them (avoid accidental dropping)
+                    if (!sc) return true;
+                    return sc === lc;
+                });
+                console.info(`[loadStudentsForStaff] After filtering by course '${loggedInStaffCourse}' -> count:`, students.length);
+            }
+
+            // Populate select
+            studentNameSelect.innerHTML = '<option value="">Select Student</option>';
+            students.forEach(stu => {
+                const option = document.createElement('option');
+                option.value = stu.id ?? stu.email ?? stu.name ?? "";
+                option.textContent = stu.name ?? stu.email ?? ("Unknown (" + (stu.id ?? "no-id") + ")");
+                option.setAttribute("data-name", stu.name ?? "");
+                option.setAttribute("data-raw", JSON.stringify(stu._raw || {}));
+                studentNameSelect.appendChild(option);
+            });
+
+            // Save for later lookups
+            window._studentsForResults = students;
+            console.info("[loadStudentsForStaff] Final dropdown options:", studentNameSelect.options.length - 1, "students loaded");
+        }
+
+        // Run loader when DOM is ready
+        document.addEventListener('DOMContentLoaded', loadStudentsForStaff);
+    </script>
+
+
+
+</body>
+
+</html>

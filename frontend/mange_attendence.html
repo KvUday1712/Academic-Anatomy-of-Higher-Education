@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Attendance</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            width: 600px;
+            max-width: 90%;
+        }
+
+        h1 {
+            font-size: 26px;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        #messageBox {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+        #messageBox.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #messageBox.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group select:focus {
+            border-color: #007bff;
+        }
+
+        .form-group button {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+
+        #absenteeList {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+        }
+
+        #absenteeList p {
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            color: #333;
+            font-size: 16px;
+        }
+
+        #absenteeList p:first-child {
+            margin-top: 0;
+        }
+
+        #absenteeList p:last-child {
+            margin-bottom: 0;
+        }
+
+        #selectedDateLabel {
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manage Attendance</h1>
+
+        <div id="messageBox"></div>
+
+        <form id="attendanceForm">
+            <div class="form-group">
+                <label for="date">Select Date</label>
+                <select id="date" name="date" required></select>
+            </div>
+            <div class="form-group">
+                <label for="month">Select Month</label>
+                <select id="month" name="month" required>
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="year">Select Year</label>
+                <select id="year" name="year" required></select>
+            </div>
+            <div class="form-group">
+                <button type="submit">View Absentees</button>
+            </div>
+        </form>
+        <div id="absenteeList"></div>
+    </div>
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if needed
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const box = document.getElementById("messageBox");
+            box.textContent = text;
+            box.className = type === "success" ? "success" : "error";
+            box.style.display = "block";
+            setTimeout(() => { box.style.display = "none"; }, 4000);
+        }
+
+        function renderAbsentees(dateKey, absentees) {
+            const absenteeList = document.getElementById('absenteeList');
+            absenteeList.innerHTML = '';
+
+            const label = document.createElement("p");
+            label.id = "selectedDateLabel";
+            label.textContent = `Date: ${dateKey}`;
+            label.style.background = "transparent";
+            label.style.padding = "0";
+            absenteeList.appendChild(label);
+
+            if (!absentees || absentees.length === 0) {
+                const p = document.createElement('p');
+                p.textContent = 'No absentees found for the selected date.';
+                absenteeList.appendChild(p);
+                return;
+            }
+
+            absentees.forEach(function(name) {
+                const p = document.createElement('p');
+                p.textContent = name;
+                absenteeList.appendChild(p);
+            });
+        }
+
+        function extractAbsenteesFromApi(data) {
+            const absentees = [];
+            if (!Array.isArray(data)) return absentees;
+
+            data.forEach(rec => {
+                const status =
+                    (rec.status || rec.attendance_status || "")
+                        .toString()
+                        .toLowerCase();
+
+                if (status === "absent" || status === "a" || status === "0") {
+                    const name =
+                        rec.student_name ||
+                        (rec.student && (rec.student.full_name || rec.student.name)) ||
+                        rec.name ||
+                        "Unknown student";
+                    absentees.push(name);
+                }
+            });
+
+            return absentees;
+        }
+
+        function loadFromLocalStorage(dateKey) {
+            const attendanceData = JSON.parse(localStorage.getItem('attendanceData') || "{}");
+            const absentees = attendanceData[dateKey] || [];
+            renderAbsentees(dateKey, absentees);
+            showMessage("Loaded absentees from local data.", "success");
+        }
+
+        async function fetchAbsentees(dateKey) {
+            const headers = {};
+            const token = getToken();
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            try {
+                const resp = await fetch(`${API_BASE}/attendance/?date=${encodeURIComponent(dateKey)}`, { headers });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                    showMessage("Could not load attendance from server: " + err, "error");
+                    // fallback to local
+                    loadFromLocalStorage(dateKey);
+                    return;
+                }
+
+                const data = await resp.json();
+                const absentees = extractAbsenteesFromApi(data);
+
+                // cache into localStorage for offline use
+                try {
+                    const attendanceData = JSON.parse(localStorage.getItem('attendanceData') || "{}");
+                    attendanceData[dateKey] = absentees;
+                    localStorage.setItem('attendanceData', JSON.stringify(attendanceData));
+                } catch (e) {
+                    console.warn("Failed to cache attendanceData:", e);
+                }
+
+                renderAbsentees(dateKey, absentees);
+                showMessage("Loaded absentees from server.", "success");
+            } catch (err) {
+                console.error("Network error while loading attendance:", err);
+                showMessage("Network error — using local attendance data if available.", "error");
+                loadFromLocalStorage(dateKey);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var dateDropdown = document.getElementById('date');
+            var yearDropdown = document.getElementById('year');
+
+            // Populate date dropdown (1-31)
+            for (var i = 1; i <= 31; i++) {
+                var option = document.createElement('option');
+                option.value = i < 10 ? '0' + i : i;
+                option.textContent = i;
+                dateDropdown.appendChild(option);
+            }
+
+            // Populate year dropdown (5 years before and after current year)
+            var currentYear = new Date().getFullYear();
+            for (var j = currentYear - 5; j <= currentYear + 5; j++) {
+                var option = document.createElement('option');
+                option.value = j;
+                option.textContent = j;
+                if (j === currentYear) option.selected = true;
+                yearDropdown.appendChild(option);
+            }
+
+            document.getElementById('attendanceForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+
+                var selectedDate = document.getElementById('date').value;
+                var selectedMonth = document.getElementById('month').value;
+                var selectedYear = document.getElementById('year').value;
+
+                var key = selectedYear + '-' + selectedMonth + '-' + selectedDate;
+
+                // Try to fetch from backend (with fallback handled inside)
+                fetchAbsentees(key);
+            });
+        });
+    </script>
+</body>
+</html>

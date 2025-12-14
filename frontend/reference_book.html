@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reference Book</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 500px;
+            text-align: center;
+        }
+        h2 {
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .form-group input[type="file"] {
+            padding: 3px;
+        }
+        .form-group button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+            font-size: 15px;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+        .back-button {
+            display: inline-block;
+            margin-top: 15px;
+            background-color: #6c757d;
+            color: #fff;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .back-button:hover {
+            background-color: #5a6268;
+        }
+        .message {
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+        .message.success {
+            color: green;
+        }
+        .message.error {
+            color: red;
+        }
+        .hint {
+            margin-top: 8px;
+            font-size: 0.8em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Reference Book</h2>
+        <form id="referenceForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="author">Author Name</label>
+                <input type="text" id="author" name="author" required>
+            </div>
+            <div class="form-group">
+                <label for="title">Book Title</label>
+                <input type="text" id="title" name="title" required>
+            </div>
+            <div class="form-group">
+                <label for="pdf">Upload PDF</label>
+                <input type="file" id="pdf" name="pdf" accept=".pdf" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Submit</button>
+            </div>
+            <a href="staff_dashboard.html" class="back-button">Back to Dashboard</a>
+            <div id="message" class="message"></div>
+            <div class="hint">
+                If the server is unavailable, the book will be stored locally for this browser only.
+            </div>
+        </form>
+    </div>
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if needed
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + (type === 'error' ? 'error' : 'success');
+        }
+
+        function saveBookLocally(book) {
+            try {
+                const list = JSON.parse(localStorage.getItem('bookList') || "[]");
+                list.push(book);
+                localStorage.setItem('bookList', JSON.stringify(list));
+            } catch (e) {
+                console.warn("Failed to save book locally:", e);
+            }
+        }
+
+        document.getElementById('referenceForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const author = document.getElementById('author').value.trim();
+            const title = document.getElementById('title').value.trim();
+            const pdfInput = document.getElementById('pdf');
+            const pdfFile = pdfInput.files[0];
+
+            if (!author || !title) {
+                showMessage("Please fill in all fields.", "error");
+                return;
+            }
+
+            if (!pdfFile) {
+                showMessage("Please upload a PDF file.", "error");
+                return;
+            }
+
+            const token = getToken();
+            const formData = new FormData();
+            formData.append("author", author);
+            formData.append("title", title);
+            formData.append("pdf", pdfFile);
+
+            let uploadedToServer = false;
+            let finalPdfUrl = null;
+            let createdId = null;
+
+            // Try backend upload
+            try {
+                const headers = {};
+                if (token) {
+                    headers["Authorization"] = `Bearer ${token}`;
+                }
+
+                const resp = await fetch(`${API_BASE}/reference-books/`, {
+                    method: "POST",
+                    headers,
+                    body: formData
+                });
+
+                if (resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    finalPdfUrl =
+                        data.pdf_url ||
+                        data.file_url ||
+                        data.url ||
+                        null;
+                    createdId = data.id || null;
+                    uploadedToServer = true;
+                } else {
+                    const data = await resp.json().catch(() => ({}));
+                    console.warn("Server refused reference-book upload:", data);
+                }
+            } catch (err) {
+                console.warn("Network/server error while uploading reference book:", err);
+            }
+
+            // Fallback / ensure we have some URL for local use
+            if (!finalPdfUrl) {
+                // Only works in this browser session, but fine as local fallback
+                finalPdfUrl = URL.createObjectURL(pdfFile);
+            }
+
+            // Save to local storage so view_reference_books.html can show it
+            const localBook = {
+                id: createdId,
+                author: author,
+                title: title,
+                pdf: finalPdfUrl,
+                source: uploadedToServer ? "server" : "local"
+            };
+            saveBookLocally(localBook);
+
+            if (uploadedToServer) {
+                showMessage("Reference book submitted successfully!", "success");
+            } else {
+                showMessage("Reference book saved locally (server unavailable).", "success");
+            }
+
+        });
+    </script>
+</body>
+</html>

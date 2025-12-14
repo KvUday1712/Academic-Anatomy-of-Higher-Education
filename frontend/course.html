@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Courses</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        .option {
+            margin: 10px 0;
+        }
+        .option a {
+            display: block;
+            padding: 15px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 18px;
+        }
+        .option a:hover {
+            background-color: #0056b3;
+        }
+        .option a:active {
+            background-color: #003d7a;
+        }
+        .logout {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .logout a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .logout a:hover {
+            text-decoration: underline;
+        }
+
+        /* summary + list styling */
+        #courseSummary {
+            margin: 10px 0 5px 0;
+            font-size: 14px;
+            color: #555;
+        }
+        #courseList {
+            list-style: none;
+            padding-left: 0;
+            margin-top: 5px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #courseList li {
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            background-color: #f7faff;
+            border: 1px solid #e0e7ff;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+        #courseList li span.code {
+            color: #555;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        #courseList li span.meta {
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manage Courses</h1>
+
+        <!-- small live summary from backend/localStorage -->
+        <div id="courseSummary">Loading courses...</div>
+        <ul id="courseList"></ul>
+
+        <div class="option">
+            <a href="add-course.html">Add New Course</a>
+        </div>
+        <div class="option">
+            <a href="manage-courses.html">Manage Existing Courses</a>
+        </div>
+        <div class="logout">
+            <a href="admin-dashboard.html">Back to Dashboard</a>
+        </div>
+    </div>
+
+    <script>
+        // Backend base. If frontend is separate, change to "http://localhost:5000/api"
+        const API_BASE = "/api";
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function renderCourses(courses) {
+            const summaryEl = document.getElementById("courseSummary");
+            const listEl = document.getElementById("courseList");
+
+            if (!Array.isArray(courses) || courses.length === 0) {
+                summaryEl.textContent = "No courses available yet.";
+                listEl.innerHTML = "";
+                return;
+            }
+
+            summaryEl.textContent = `Total courses: ${courses.length}`;
+            listEl.innerHTML = "";
+
+            courses.forEach(c => {
+                const li = document.createElement("li");
+
+                // handle both object and string shapes
+                let name = "";
+                let code = "";
+                let extra = "";
+
+                if (typeof c === "string") {
+                    name = c;
+                } else {
+                    name = c.name || c.title || "Untitled";
+                    code = c.code || "";
+                    if (c.created_at) extra = new Date(c.created_at).toLocaleDateString();
+                }
+
+                const leftSpan = document.createElement("span");
+                leftSpan.textContent = name;
+                if (code) {
+                    const codeSpan = document.createElement("span");
+                    codeSpan.className = "code";
+                    codeSpan.textContent = `(${code})`;
+                    leftSpan.appendChild(codeSpan);
+                }
+
+                const rightSpan = document.createElement("span");
+                rightSpan.className = "meta";
+                if (extra) rightSpan.textContent = extra;
+
+                li.appendChild(leftSpan);
+                li.appendChild(rightSpan);
+                listEl.appendChild(li);
+            });
+        }
+
+        async function loadCourses() {
+            const summaryEl = document.getElementById("courseSummary");
+
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/courses/`, { headers });
+                if (!resp.ok) throw new Error("Bad response from server");
+                const data = await resp.json();
+
+                // cache in localStorage for other pages / offline
+                localStorage.setItem("courses", JSON.stringify(data));
+                renderCourses(data);
+            } catch (err) {
+                console.warn("Could not load courses from backend, falling back to localStorage:", err);
+                const fallback = JSON.parse(localStorage.getItem("courses") || "[]");
+                if (fallback.length === 0) {
+                    summaryEl.textContent = "Unable to load courses. None cached locally.";
+                } else {
+                    renderCourses(fallback);
+                }
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", loadCourses);
+    </script>
+</body>
+</html>

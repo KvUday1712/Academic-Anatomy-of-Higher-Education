@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Sessions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        #message {
+            margin-top: 5px;
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+        #message.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #message.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+        .session-list {
+            margin-top: 20px;
+        }
+        .session-list ul {
+            list-style: none;
+            padding: 0;
+        }
+        .session-list ul li {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+        .session-main {
+            display: flex;
+            flex-direction: column;
+        }
+        .session-name {
+            font-weight: 600;
+        }
+        .session-dates {
+            font-size: 12px;
+            color: #666;
+        }
+        .session-list ul li button {
+            background-color: #dc3545;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .session-list ul li button:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manage Sessions</h1>
+
+        <div id="message"></div>
+
+        <div class="session-list">
+            <ul id="sessionList">
+                <!-- Sessions will be dynamically loaded here -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if frontend is separate
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const el = document.getElementById("message");
+            el.textContent = text;
+            el.className = type === "success" ? "success" : "error";
+            el.style.display = "block";
+            setTimeout(() => { el.style.display = "none"; }, 4000);
+        }
+
+        // Sessions kept in memory for deleting by index
+        let currentSessions = []; // array of { id, name, start_date, end_date, _source, localIndex }
+
+        function normalizeSession(s, indexFromLocal = null, source = "server") {
+            if (typeof s === "string") {
+                return {
+                    id: null,
+                    name: s,
+                    start_date: "",
+                    end_date: "",
+                    _source: source,
+                    localIndex: indexFromLocal
+                };
+            }
+            return {
+                id: s.id || null,
+                name: s.name || s.label || "Unnamed",
+                start_date: s.start_date || s.from || "",
+                end_date: s.end_date || s.to || "",
+                _source: source,
+                localIndex: indexFromLocal
+            };
+        }
+
+        function renderSessions() {
+            const list = document.getElementById('sessionList');
+            list.innerHTML = '';
+
+            if (!currentSessions.length) {
+                const empty = document.createElement("li");
+                empty.textContent = "No sessions available. Please add a session.";
+                list.appendChild(empty);
+                return;
+            }
+
+            currentSessions.forEach((session, index) => {
+                const li = document.createElement('li');
+
+                const mainDiv = document.createElement("div");
+                mainDiv.className = "session-main";
+
+                const nameSpan = document.createElement("span");
+                nameSpan.className = "session-name";
+                nameSpan.textContent = session.name;
+
+                const datesSpan = document.createElement("span");
+                datesSpan.className = "session-dates";
+                if (session.start_date || session.end_date) {
+                    const from = session.start_date || "-";
+                    const to = session.end_date || "-";
+                    datesSpan.textContent = `From: ${from}  |  To: ${to}`;
+                } else {
+                    datesSpan.textContent = "";
+                }
+
+                mainDiv.appendChild(nameSpan);
+                if (datesSpan.textContent) mainDiv.appendChild(datesSpan);
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.textContent = "Delete";
+                deleteBtn.onclick = () => deleteSession(index);
+
+                li.appendChild(mainDiv);
+                li.appendChild(deleteBtn);
+                list.appendChild(li);
+            });
+        }
+
+        async function loadSessions() {
+            currentSessions = [];
+
+            // Try backend first
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/sessions/`, { headers });
+                if (!resp.ok) throw new Error("Bad response from backend");
+                const data = await resp.json();
+
+                if (Array.isArray(data)) {
+                    currentSessions = data.map(s => normalizeSession(s, null, "server"));
+                }
+
+                // Cache in localStorage for offline usage
+                try {
+                    localStorage.setItem("sessions", JSON.stringify(data));
+                } catch (e) {
+                    console.warn("Unable to cache sessions:", e);
+                }
+            } catch (err) {
+                console.warn("Could not load sessions from backend, falling back to localStorage:", err);
+                const local = JSON.parse(localStorage.getItem('sessions') || "[]");
+                currentSessions = local.map((s, idx) => normalizeSession(s, idx, "local"));
+            }
+
+            renderSessions();
+        }
+
+        async function deleteSession(index) {
+            const session = currentSessions[index];
+            if (!session) return;
+
+            if (!confirm(`Are you sure you want to delete session "${session.name}"?`)) return;
+
+            // Helper: update localStorage
+            function deleteFromLocalStorage() {
+                try {
+                    const stored = JSON.parse(localStorage.getItem('sessions') || "[]");
+                    let updated;
+                    if (typeof session.localIndex === "number") {
+                        // original local index known
+                        updated = stored.filter((_, idx) => idx !== session.localIndex);
+                    } else {
+                        // fall back to filtering by name
+                        updated = stored.filter(s => {
+                            const name = typeof s === "string" ? s : (s.name || s.label);
+                            return name !== session.name;
+                        });
+                    }
+                    localStorage.setItem('sessions', JSON.stringify(updated));
+                } catch (e) {
+                    console.warn("Failed to update localStorage sessions:", e);
+                }
+            }
+
+            // Try backend delete if id exists
+            if (session.id !== null && session.id !== undefined) {
+                try {
+                    const headers = {};
+                    const token = getToken();
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                    const resp = await fetch(`${API_BASE}/sessions/${session.id}`, {
+                        method: "DELETE",
+                        headers
+                    });
+
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                        showMessage("Error deleting session: " + err, "error");
+                        return;
+                    }
+
+                    // Also delete from local cache
+                    deleteFromLocalStorage();
+                    showMessage("Session deleted successfully.", "success");
+                    currentSessions.splice(index, 1);
+                    renderSessions();
+                    return;
+                } catch (err) {
+                    console.error("Network error deleting session, falling back to local-only delete:", err);
+                    // fall through to local-only
+                }
+            }
+
+            // Local-only delete (no id or backend unreachable)
+            deleteFromLocalStorage();
+            showMessage("Session deleted locally.", "success");
+            currentSessions.splice(index, 1);
+            renderSessions();
+        }
+
+        document.addEventListener('DOMContentLoaded', loadSessions);
+    </script>
+</body>
+</html>

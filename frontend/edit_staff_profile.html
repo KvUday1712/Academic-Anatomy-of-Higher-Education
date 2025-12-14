@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Staff Profile</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input[type="text"],
+        .form-group input[type="email"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .form-group button {
+            padding: 10px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+        .back {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .back a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back a:hover {
+            text-decoration: underline;
+        }
+        #message {
+            display:none;
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        #message.success {
+            display:block;
+            background:#e6ffed;
+            color:#087a3d;
+            border:1px solid #bdf0cb;
+        }
+        #message.error {
+            display:block;
+            background:#ffe6e6;
+            color:#9a0b0b;
+            border:1px solid #f5bcbc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Edit Staff Profile</h1>
+
+        <div id="message"></div>
+
+        <form id="editStaffForm">
+            <!-- old email keeps compatibility with previous localStorage logic -->
+            <input type="hidden" id="oldEmail" name="oldEmail">
+            <!-- new: backend staff ID -->
+            <input type="hidden" id="staffId" name="staffId">
+
+            <div class="form-group">
+                <label for="staffName">Name</label>
+                <input type="text" id="staffName" name="staffName" required>
+            </div>
+            <div class="form-group">
+                <label for="staffEmail">Email</label>
+                <input type="email" id="staffEmail" name="staffEmail" required>
+            </div>
+            <div class="form-group">
+                <button type="submit">Update Staff</button>
+            </div>
+        </form>
+        <div class="back">
+            <a href="manage_profile.html">Back to Manage Profiles</a>
+        </div>
+    </div>
+
+    <script>
+        // ==== CONFIG / HELPERS ====
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if frontend served separately
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const el = document.getElementById("message");
+            el.textContent = text;
+            el.className = type === "success" ? "success" : "error";
+            el.style.display = "block";
+            setTimeout(() => { el.style.display = "none"; }, 4000);
+        }
+
+        // Function to get URL parameters
+        function getUrlParameter(name) {
+            const regex = new RegExp('[?&]' + name + '=([^&#]*)');
+            const results = regex.exec(window.location.search);
+            return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+        }
+
+        // ==== LOAD STAFF FROM BACKEND OR LOCALSTORAGE ====
+        async function loadStaffProfile() {
+            const staffIdParam = getUrlParameter('id');
+            const emailParam = getUrlParameter('email');
+            const nameInput = document.getElementById('staffName');
+            const emailInput = document.getElementById('staffEmail');
+            const oldEmailInput = document.getElementById('oldEmail');
+            const staffIdInput = document.getElementById('staffId');
+
+            // helper: fallback to localStorage-based loading (old behavior)
+            function loadFromLocalStorage() {
+                const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
+                let staff = null;
+
+                if (emailParam) {
+                    staff = staffList.find(s => s.email === emailParam);
+                } else if (staffIdParam) {
+                    // in older version we may not have id, so skip if not stored
+                    staff = staffList.find(s => String(s.id) === String(staffIdParam));
+                }
+
+                if (staff) {
+                    oldEmailInput.value = staff.email || "";
+                    staffIdInput.value = staff.id || "";
+                    nameInput.value = staff.name || staff.full_name || "";
+                    emailInput.value = staff.email || "";
+                } else {
+                    alert('Staff not found');
+                    window.location.href = 'manage_profile.html';
+                }
+            }
+
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                let staffData = null;
+
+                if (staffIdParam) {
+                    // Preferred: fetch by ID
+                    const resp = await fetch(`${API_BASE}/staff/${staffIdParam}`, { headers });
+                    if (!resp.ok) throw new Error("Failed to load staff by id");
+                    staffData = await resp.json();
+                } else if (emailParam) {
+                    // Fallback: fetch by email query
+                    const resp = await fetch(`${API_BASE}/staff?email=${encodeURIComponent(emailParam)}`, { headers });
+                    if (!resp.ok) throw new Error("Failed to load staff by email");
+                    const data = await resp.json();
+                    staffData = Array.isArray(data) ? data[0] : data;
+                }
+
+                if (!staffData) {
+                    // If API returns nothing, fall back to localStorage
+                    loadFromLocalStorage();
+                    return;
+                }
+
+                // staffData may look like:
+                // { id, full_name, department, contact, user: { email, username, ... }, email? }
+                const email = staffData.email || (staffData.user && staffData.user.email) || emailParam || "";
+                const fullName = staffData.full_name || staffData.name || "";
+
+                oldEmailInput.value = email;
+                staffIdInput.value = staffData.id || staffIdParam || "";
+                nameInput.value = fullName;
+                emailInput.value = email;
+
+                // cache in localStorage for offline / other pages
+                try {
+                    const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
+                    const idx = staffList.findIndex(s =>
+                        (s.id && staffData.id && String(s.id) === String(staffData.id)) ||
+                        (s.email && email && s.email === email)
+                    );
+                    const normalized = {
+                        id: staffData.id || staffIdParam || null,
+                        name: fullName,
+                        email: email
+                    };
+                    if (idx >= 0) {
+                        staffList[idx] = normalized;
+                    } else {
+                        staffList.push(normalized);
+                    }
+                    localStorage.setItem('staffList', JSON.stringify(staffList));
+                } catch (e) {
+                    console.warn("Could not cache staff in localStorage:", e);
+                }
+            } catch (err) {
+                console.warn("Error loading staff from backend, using localStorage:", err);
+                loadFromLocalStorage();
+            }
+        }
+
+        // ==== SUBMIT HANDLER ====
+        async function handleUpdateStaff(event) {
+            event.preventDefault();
+
+            const oldEmail = document.getElementById('oldEmail').value;
+            const staffId = document.getElementById('staffId').value;
+            const newName = document.getElementById('staffName').value.trim();
+            const newEmail = document.getElementById('staffEmail').value.trim();
+
+            if (!newName || !newEmail) {
+                showMessage("Please fill all fields.", "error");
+                return;
+            }
+
+            // helper: update localStorage cache (keeps old behavior)
+            function updateLocalStorageOnly() {
+                const staffList = JSON.parse(localStorage.getItem('staffList') || "[]");
+                const index = staffList.findIndex(s => s.email === oldEmail || String(s.id) === String(staffId));
+                if (index !== -1) {
+                    staffList[index] = {
+                        ...(staffList[index] || {}),
+                        name: newName,
+                        full_name: newName,
+                        email: newEmail
+                    };
+                    localStorage.setItem('staffList', JSON.stringify(staffList));
+                }
+            }
+
+            // Try backend update first
+            try {
+                if (!staffId) {
+                    // no backend id -> purely local update
+                    updateLocalStorageOnly();
+                    showMessage("Staff updated locally (no backend id).", "success");
+                    window.location.href = 'manage_profile.html';
+                    return;
+                }
+
+                const payload = {
+                    full_name: newName,
+                    email: newEmail
+                };
+
+                const headers = { "Content-Type": "application/json" };
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/staff/${staffId}`, {
+                    method: "PUT",
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await resp.json().catch(() => ({}));
+
+                if (resp.ok) {
+                    // also update local cache
+                    updateLocalStorageOnly();
+                    showMessage("Staff profile updated successfully.", "success");
+                    // small delay so message is visible, then redirect
+                    setTimeout(() => {
+                        window.location.href = 'manage_profile.html';
+                    }, 800);
+                } else {
+                    const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                    showMessage("Error updating staff: " + err, "error");
+                }
+            } catch (err) {
+                console.error("Network error updating staff, falling back to localStorage:", err);
+                updateLocalStorageOnly();
+                showMessage("Backend not reachable — updated locally.", "success");
+                setTimeout(() => {
+                    window.location.href = 'manage_profile.html';
+                }, 800);
+            }
+        }
+
+        // ==== INIT ====
+        document.addEventListener("DOMContentLoaded", function () {
+            loadStaffProfile();
+            document.getElementById('editStaffForm').addEventListener('submit', handleUpdateStaff);
+        });
+    </script>
+</body>
+</html>

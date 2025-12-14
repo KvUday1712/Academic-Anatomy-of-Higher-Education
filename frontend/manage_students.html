@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Students</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: auto;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+        }
+        #message {
+            margin-top: 5px;
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.95em;
+            display: none;
+        }
+        #message.success {
+            display: block;
+            background: #e6ffed;
+            color: #087a3d;
+            border: 1px solid #bdf0cb;
+        }
+        #message.error {
+            display: block;
+            background: #ffe6e6;
+            color: #9a0b0b;
+            border: 1px solid #f5bcbc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #007bff;
+            color: #fff;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .delete-btn {
+            color: #dc3545;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+        }
+        .delete-btn:hover {
+            text-decoration: underline;
+        }
+        #noStudents {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Manage Students</h1>
+        <a href="admin_dashboard.html" class="button">Back to Dashboard</a>
+
+        <div id="message"></div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Course</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="studentTableBody">
+                <!-- Student rows will be added dynamically -->
+            </tbody>
+        </table>
+        <p id="noStudents" style="display: none;">No students found.</p>
+    </div>
+
+    <script>
+        const API_BASE = "/api"; // change to "http://localhost:5000/api" if frontend is separate
+
+        function getToken() {
+            return localStorage.getItem("token") || null;
+        }
+
+        function showMessage(text, type = "success") {
+            const el = document.getElementById("message");
+            el.textContent = text;
+            el.className = type === "success" ? "success" : "error";
+            el.style.display = "block";
+            setTimeout(() => { el.style.display = "none"; }, 4000);
+        }
+
+        // Keep normalized students in memory
+        let currentStudents = []; // { id, name, email, course, _source, localIndex }
+
+        function normalizeStudent(s, indexFromLocal = null, source = "server") {
+            if (source === "local") {
+                // local format: { name, email, course, ... }
+                return {
+                    id: s.id || null,
+                    name: s.name || s.full_name || "Unknown",
+                    email: s.email || "",
+                    course: s.course || s.course_name || "",
+                    _source: source,
+                    localIndex: indexFromLocal
+                };
+            }
+
+            // server format: { id, full_name, course: {name}, user: {email}, ... }
+            const name = s.full_name || s.name || "Unknown";
+            const email =
+                s.email ||
+                (s.user && s.user.email) ||
+                "";
+            const courseName =
+                (s.course && (s.course.name || s.course.code)) ||
+                s.course_name ||
+                "";
+
+            return {
+                id: s.id || null,
+                name,
+                email,
+                course: courseName,
+                _source: source,
+                localIndex: indexFromLocal
+            };
+        }
+
+        function renderStudents() {
+            const tbody = document.getElementById('studentTableBody');
+            const noStudents = document.getElementById('noStudents');
+
+            tbody.innerHTML = '';
+
+            if (!currentStudents.length) {
+                noStudents.style.display = 'block';
+                return;
+            }
+
+            noStudents.style.display = 'none';
+
+            currentStudents.forEach((student, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${student.name || ''}</td>
+                    <td>${student.email || ''}</td>
+                    <td>${student.course || ''}</td>
+                    <td><button class="delete-btn" onclick="deleteStudent(${index})">Delete</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function readLocalStudents() {
+            try {
+                const students = JSON.parse(localStorage.getItem('students') || "[]");
+                return students.map((s, idx) => normalizeStudent(s, idx, "local"));
+            } catch (e) {
+                return [];
+            }
+        }
+
+        async function loadStudentData() {
+            currentStudents = [];
+
+            // Try backend first
+            try {
+                const headers = {};
+                const token = getToken();
+                if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                const resp = await fetch(`${API_BASE}/students/`, { headers });
+                if (!resp.ok) throw new Error("Bad response from backend");
+                const data = await resp.json();
+
+                if (Array.isArray(data)) {
+                    currentStudents = data.map(s => normalizeStudent(s, null, "server"));
+                }
+
+                // cache simplified version to localStorage
+                try {
+                    const cache = currentStudents.map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        email: s.email,
+                        course: s.course
+                    }));
+                    localStorage.setItem("students", JSON.stringify(cache));
+                } catch (e) {
+                    console.warn("Could not cache students:", e);
+                }
+            } catch (err) {
+                console.warn("Could not load students from backend, falling back to localStorage:", err);
+                currentStudents = readLocalStudents();
+            }
+
+            renderStudents();
+        }
+
+        async function deleteStudent(index) {
+            const student = currentStudents[index];
+            if (!student) return;
+
+            if (!confirm(`Are you sure you want to delete student "${student.name}"?`)) return;
+
+            // helper: delete from localStorage
+            function deleteFromLocalStorage() {
+                try {
+                    const stored = JSON.parse(localStorage.getItem('students') || "[]");
+                    let updated;
+                    if (typeof student.localIndex === "number") {
+                        updated = stored.filter((_, idx) => idx !== student.localIndex);
+                    } else {
+                        updated = stored.filter(s => {
+                            const name = s.name || s.full_name;
+                            const email = s.email;
+                            return !(name === student.name && email === student.email);
+                        });
+                    }
+                    localStorage.setItem('students', JSON.stringify(updated));
+                } catch (e) {
+                    console.warn("Failed to update localStorage students:", e);
+                }
+            }
+
+            // Try backend delete if we have an id
+            if (student.id !== null && student.id !== undefined) {
+                try {
+                    const headers = {};
+                    const token = getToken();
+                    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+                    const resp = await fetch(`${API_BASE}/students/${student.id}`, {
+                        method: "DELETE",
+                        headers
+                    });
+
+                    if (!resp.ok) {
+                        const data = await resp.json().catch(() => ({}));
+                        const err = data.msg || data.error || `Server responded with ${resp.status}`;
+                        showMessage("Error deleting student: " + err, "error");
+                        return;
+                    }
+
+                    deleteFromLocalStorage();
+                    showMessage("Student deleted successfully.", "success");
+                    currentStudents.splice(index, 1);
+                    renderStudents();
+                    return;
+                } catch (err) {
+                    console.error("Network error while deleting student, falling back to local-only delete:", err);
+                    // fall through to local-only
+                }
+            }
+
+            // Local-only delete
+            deleteFromLocalStorage();
+            showMessage("Student deleted locally.", "success");
+            currentStudents.splice(index, 1);
+            renderStudents();
+        }
+
+        // Expose deleteStudent for inline onclick
+        window.deleteStudent = deleteStudent;
+
+        // Load data on page load
+        window.onload = loadStudentData;
+    </script>
+</body>
+</html>
