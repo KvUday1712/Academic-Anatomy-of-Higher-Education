@@ -95,17 +95,17 @@ The **Student** module allows students to access academic information and submit
    cd Academic-Anatomy-Of-Higher-Education
    ```
 3. Install required dependencies
-  ```bash
-  pip install -r requirements.txt
-  ```
+   ```bash
+   pip install -r requirements.txt
+   ```
 4. Run the application
-  ```bash
-  python app.py
-  ```
+   ```bash
+   python app.py
+   ```
 5. Open your browser and navigate to
-```bash
-http://localhost:5000
-```
+   ```bash
+   http://localhost:5000
+   ```
 
 ---
 ##Future Enhancements
