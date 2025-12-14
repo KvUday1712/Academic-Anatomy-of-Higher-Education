@@ -108,7 +108,7 @@ The **Student** module allows students to access academic information and submit
    ```
 
 ---
-##Future Enhancements
+## Future Enhancements
 
 - Dashboard analytics for students and staff
 
@@ -120,7 +120,7 @@ The **Student** module allows students to access academic information and submit
 
 - Enhanced security and role management
 
-##Project Status
+## Project Status
 
 - Status: In Progress / Completed
 
