@@ -1,5 +1,8 @@
 # Academic Anatomy Of Higher Education
 
+**Detailed Blog Post:**
+[Read the full article on Medium](https://medium.com/@kvuday70/why-academic-management-still-needs-fixing-a702bda3c71a)
+
 ## Overview
 
 **Academic Anatomy of Higher Education** is a centralized academic management platform designed to simplify and automate key academic and administrative processes in higher educational institutions.  
